@@ -1,0 +1,3060 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>國小科任成績統整系統 (五年級自然 / 二年級體育)</title>
+    <!-- 引入 Tailwind CSS 與 Inter 字體 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- 引入 FontAwesome 圖示 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Inter', 'Noto Sans TC', sans-serif;
+            background-color: #f8fafc;
+        }
+        /* 隱藏數字輸入框的上下箭頭，方便快速鍵盤輸入 */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
+        }
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+        /* 凍結左側座號與姓名欄位，方便橫向捲動看多項成績 */
+        .sticky-col-1 {
+            position: sticky;
+            left: 0;
+            z-index: 10;
+        }
+        .sticky-col-2 {
+            position: sticky;
+            left: 60px;
+            z-index: 10;
+        }
+        .sticky-header-1 {
+            position: sticky;
+            left: 0;
+            z-index: 20;
+        }
+        .sticky-header-2 {
+            position: sticky;
+            left: 60px;
+            z-index: 20;
+        }
+    </style>
+</head>
+<body class="text-slate-800 antialiased pb-12">
+
+    <!-- 頂部導覽列 -->
+    <header class="bg-indigo-700 text-white shadow-md transition-colors duration-300" id="mainHeader">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div class="flex flex-col sm:flex-row sm:items-center gap-4">
+                <div class="flex items-center gap-3">
+                    <div class="bg-white/20 p-2.5 rounded-xl">
+                        <i class="fa-solid fa-graduation-cap text-2xl" id="headerIcon"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold tracking-wide" id="headerTitle">國小五年級自然科成績統整系統</h1>
+                        <p class="text-xs text-white/80">單機離線版 · 資料自動儲存於本機瀏覽器</p>
+                    </div>
+                </div>
+
+                <!-- 科目切換器：五年級自然 vs 二年級體育 -->
+                <div class="flex bg-black/20 p-1 rounded-xl self-start sm:self-auto">
+                    <button onclick="switchSubject('grade5_science')" id="tab-grade5_science" class="px-3.5 py-1.5 rounded-lg text-sm font-bold bg-white text-indigo-800 shadow transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-flask"></i> 五年級自然 (507~512)
+                    </button>
+                    <button onclick="switchSubject('grade2_pe')" id="tab-grade2_pe" class="px-3.5 py-1.5 rounded-lg text-sm font-medium text-white/90 hover:text-white transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-person-running"></i> 二年級體育 (212~213)
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 系統資料備份與還原按鈕 -->
+            <div class="flex flex-wrap items-center gap-2">
+                <button onclick="resetToPresetRosters()" class="bg-amber-500 hover:bg-amber-400 text-white text-sm font-medium px-3.5 py-2 rounded-lg shadow transition flex items-center gap-2" title="重新套用 115 學年度所有班級名單與預設項目">
+                    <i class="fa-solid fa-rotate"></i> 套用 115 學年名單
+                </button>
+                <button onclick="exportCSV()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium px-3.5 py-2 rounded-lg shadow transition flex items-center gap-2">
+                    <i class="fa-solid fa-file-excel"></i> 匯出本班 Excel (CSV)
+                </button>
+                <button onclick="exportJSON()" class="bg-white/15 hover:bg-white/25 border border-white/30 text-white text-sm font-medium px-3.5 py-2 rounded-lg transition flex items-center gap-2">
+                    <i class="fa-solid fa-download"></i> 備份全學年資料
+                </button>
+                <label class="bg-white/15 hover:bg-white/25 border border-white/30 text-white text-sm font-medium px-3.5 py-2 rounded-lg transition flex items-center gap-2 cursor-pointer">
+                    <i class="fa-solid fa-upload"></i> 還原資料
+                    <input type="file" id="importFile" accept=".json" class="hidden" onchange="importJSON(event)">
+                </label>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 space-y-6">
+
+        <!-- 班級切換與學期設定區 -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <!-- 班級切換按鈕 -->
+            <div class="flex flex-wrap items-center gap-2">
+                <span class="text-sm font-bold text-slate-500 mr-1"><i class="fa-solid fa-users mr-1"></i>選擇班級：</span>
+                <div id="classTabs" class="flex flex-wrap gap-2">
+                    <!-- 由 JS 動態生成班級按鈕 -->
+                </div>
+            </div>
+
+            <!-- 權重設定與名單匯入 -->
+            <div class="flex flex-wrap items-center gap-3 border-t lg:border-t-0 pt-3 lg:pt-0 border-slate-100">
+                <div id="weightSettingBox" class="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 text-sm">
+                    <span class="text-slate-600 font-medium">學期總分比例：平時</span>
+                    <input type="number" id="regularWeightInput" min="0" max="100" value="50" onchange="updateGlobalSettings()" class="w-14 text-center font-bold text-indigo-700 bg-white border border-slate-300 rounded-md py-0.5">
+                    <span class="text-slate-600 font-medium">% + 段考</span>
+                    <span id="examWeightDisplay" class="font-bold text-indigo-700">50</span>
+                    <span class="text-slate-600 font-medium">%</span>
+                </div>
+
+                <div id="peInfoBadge" class="hidden items-center gap-2 bg-orange-50 px-3 py-1.5 rounded-xl border border-orange-200 text-sm text-orange-800 font-medium">
+                    <i class="fa-solid fa-calculator"></i> 體育科計分：依各項目設定權重加權計算（四捨五入至整數）
+                </div>
+
+                <button onclick="openRosterModal()" class="bg-slate-800 hover:bg-slate-700 text-white text-sm font-medium px-4 py-2 rounded-xl transition flex items-center gap-2">
+                    <i class="fa-solid fa-user-plus"></i> 編輯 / 批次貼上名單
+                </button>
+            </div>
+        </div>
+
+        <!-- 【五年級自然】平時成績三大項目管理卡片 -->
+        <div id="scienceCategoryPanel" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <!-- 類別 1：自己出的考卷 (25%) -->
+            <div class="bg-white rounded-2xl shadow-sm border border-blue-200 p-4 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full bg-blue-500"></span>
+                            <h2 class="font-bold text-slate-800">1. 自己出的考卷</h2>
+                        </div>
+                        <span class="bg-blue-100 text-blue-800 text-xs font-bold px-2.5 py-1 rounded-full">佔平時 25%</span>
+                    </div>
+                    <div id="items-quiz" class="flex flex-wrap gap-2 mb-3">
+                        <!-- 動態項目標籤 -->
+                    </div>
+                </div>
+                <button onclick="addColumn('quiz')" class="w-full py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium text-sm rounded-xl border border-blue-200 transition flex items-center justify-center gap-1">
+                    <i class="fa-solid fa-plus"></i> 新增自出考卷成績
+                </button>
+            </div>
+
+            <!-- 類別 2：作業與上課表現 (50%) -->
+            <div class="bg-white rounded-2xl shadow-sm border border-amber-200 p-4 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full bg-amber-500"></span>
+                            <h2 class="font-bold text-slate-800">2. 作業與上課表現</h2>
+                        </div>
+                        <span class="bg-amber-100 text-amber-800 text-xs font-bold px-2.5 py-1 rounded-full">佔平時 50%</span>
+                    </div>
+                    <div id="items-homework" class="flex flex-wrap gap-2 mb-3">
+                        <!-- 動態項目標籤 -->
+                    </div>
+                </div>
+                <div class="space-y-1.5">
+                    <button onclick="addColumn('homework', false)" class="w-full py-2 bg-amber-50 hover:bg-amber-100 text-amber-700 font-medium text-sm rounded-xl border border-amber-200 transition flex items-center justify-center gap-1">
+                        <i class="fa-solid fa-plus"></i> 新增作業 / 表現成績 (計分)
+                    </button>
+                    <button onclick="addColumn('homework', true)" class="w-full py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-medium text-xs rounded-xl border border-emerald-200 transition flex items-center justify-center gap-1">
+                        <i class="fa-solid fa-clipboard-check"></i> 新增只檢查項目 (不計分)
+                    </button>
+                </div>
+            </div>
+
+            <!-- 類別 3：學校傳統 A、B 卷 (25%) -->
+            <div class="bg-white rounded-2xl shadow-sm border border-purple-200 p-4 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full bg-purple-500"></span>
+                            <h2 class="font-bold text-slate-800">3. 學校傳統 A、B 卷</h2>
+                        </div>
+                        <span class="bg-purple-100 text-purple-800 text-xs font-bold px-2.5 py-1 rounded-full">佔平時 25%</span>
+                    </div>
+                    <div id="items-abtest" class="flex flex-wrap gap-2 mb-3">
+                        <!-- 動態項目標籤 -->
+                    </div>
+                </div>
+                <button onclick="addColumn('abtest')" class="w-full py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 font-medium text-sm rounded-xl border border-purple-200 transition flex items-center justify-center gap-1">
+                    <i class="fa-solid fa-plus"></i> 新增 A/B 卷成績
+                </button>
+            </div>
+        </div>
+
+        <!-- 【二年級體育】平時項目管理卡片 -->
+        <div id="peCategoryPanel" class="hidden bg-white rounded-2xl shadow-sm border border-orange-200 p-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-orange-500"></span>
+                    <h2 class="font-bold text-slate-800">二年級體育 — 項目考試與上課表現權重管理</h2>
+                    <span id="peWeightTotalBadge" class="bg-emerald-100 text-emerald-800 text-xs font-bold px-2.5 py-0.5 rounded-full">目前權重總和：100%</span>
+                </div>
+                <button onclick="addColumn('pe')" class="py-1.5 px-4 bg-orange-50 hover:bg-orange-100 text-orange-700 font-medium text-sm rounded-xl border border-orange-200 transition flex items-center gap-1.5 self-start sm:self-auto">
+                    <i class="fa-solid fa-plus"></i> 新增體育測驗項目
+                </button>
+            </div>
+            <div id="items-pe" class="flex flex-wrap gap-2">
+                <!-- 動態體育項目 -->
+            </div>
+        </div>
+
+        <!-- 快捷操作與學務系統複製列 -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 space-y-3">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div class="text-sm text-slate-600 flex items-center gap-2">
+                    <i class="fa-solid fa-lightbulb text-amber-500"></i>
+                    <span>小技巧：輸入分數按 <kbd class="px-1.5 py-0.5 bg-slate-100 border border-slate-300 rounded text-xs font-mono">Enter</kbd> 或 <kbd class="px-1.5 py-0.5 bg-slate-100 border border-slate-300 rounded text-xs font-mono">↓</kbd> 可自動跳下一位學生；留白不計入平均。</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-2" id="copyButtonsContainer">
+                    <!-- 由 JS 依科目動態渲染複製按鈕 -->
+                </div>
+            </div>
+            <!-- 分數級距顏色圖例 -->
+            <div class="flex flex-wrap items-center gap-2 pt-2.5 border-t border-slate-100 text-xs">
+                <span class="font-bold text-slate-500 mr-1"><i class="fa-solid fa-palette mr-1"></i>分數級距色標：</span>
+                <span class="px-2.5 py-0.5 rounded-md font-bold bg-amber-100 text-amber-800 border border-amber-300">100分</span>
+                <span class="px-2.5 py-0.5 rounded-md font-bold bg-sky-100 text-sky-800 border border-sky-200">99-90分</span>
+                <span class="px-2.5 py-0.5 rounded-md font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">89-80分</span>
+                <span class="px-2.5 py-0.5 rounded-md font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">79-70分</span>
+                <span class="px-2.5 py-0.5 rounded-md font-bold bg-orange-100 text-orange-800 border border-orange-200">69-60分</span>
+                <span class="px-2.5 py-0.5 rounded-md font-bold bg-rose-100 text-rose-700 border border-rose-300">60分以下</span>
+            </div>
+        </div>
+
+        <!-- 成績輸入主表格 -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm text-left border-collapse" id="gradeTable">
+                    <thead id="tableHead" class="bg-slate-100 text-slate-700 border-b border-slate-200 select-none">
+                        <!-- 由 JS 動態生成表頭 -->
+                    </thead>
+                    <tbody id="tableBody" class="divide-y divide-slate-100">
+                        <!-- 由 JS 動態生成學生列 -->
+                    </tbody>
+                    <tfoot id="tableFoot" class="bg-slate-100/90 font-bold text-slate-800 border-t-2 border-slate-300">
+                        <!-- 由 JS 動態生成全班平均列 -->
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+
+        <!-- 作業/測驗「缺交」與「未完成訂正」自動追蹤看板 -->
+        <div class="bg-white rounded-2xl shadow-sm border border-rose-200 p-5 space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                <div class="flex items-center gap-2.5">
+                    <div class="bg-rose-100 text-rose-700 p-2 rounded-lg">
+                        <i class="fa-solid fa-clipboard-list"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-base font-bold text-slate-800" id="trackerTitle">507 班 — 作業「缺交/未訂正」與考卷「缺考」追蹤看板</h2>
+                        <p class="text-xs text-slate-500">
+                            <span class="inline-block px-1.5 py-0.2 bg-rose-50 border border-dashed border-rose-400 text-rose-700 rounded font-medium">分數留白</span> 自動列缺交/缺考；<span class="inline-block px-1.5 py-0.2 bg-amber-50 border border-amber-400 text-amber-800 rounded font-medium">自然科未滿100分</span> 自動列未訂正（訂正完按 <kbd class="px-1.5 py-0.5 bg-slate-100 border border-slate-300 rounded text-[11px] font-mono">右鍵</kbd> 即可解除）
+                        </p>
+                    </div>
+                </div>
+                <button onclick="copyMissingTrackerToClipboard()" class="bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-sm transition flex items-center gap-1.5 self-start sm:self-auto">
+                    <i class="fa-regular fa-copy"></i> 複製缺交／缺考／未訂正名單（傳給導師）
+                </button>
+            </div>
+
+            <div id="trackerGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                <!-- 由 JS 動態生成各項目缺交與未訂正卡片 -->
+            </div>
+        </div>
+
+        <!-- 🦖 小恐龍班級 & 個人加分自動追蹤面板 -->
+        <div id="dinoTrackerPanel" class="bg-white rounded-2xl shadow-sm border border-emerald-200 p-5 space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                <div class="flex items-center gap-2.5">
+                    <div class="bg-emerald-100 text-emerald-700 p-2 rounded-lg text-lg leading-none">
+                        🦖
+                    </div>
+                    <div>
+                        <h2 class="text-base font-bold text-slate-800" id="dinoTitle">507 班 — 小恐龍加分自動追蹤面板</h2>
+                        <p class="text-xs text-slate-500">自動偵測「作業交齊（全班 +5 分）」與「100分滿分名單（個人 +1 分）」，勾選記錄避免重複或漏加！</p>
+                    </div>
+                </div>
+                <button onclick="copyDinoSummaryToClipboard()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-sm transition flex items-center gap-1.5 self-start sm:self-auto">
+                    <i class="fa-regular fa-copy"></i> 複製本班小恐龍加分清單
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <!-- 左側：作業交齊全班 +5 分追蹤 -->
+                <div class="bg-emerald-50/50 rounded-xl border border-emerald-200/80 p-4 space-y-2.5">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-sm font-bold text-emerald-900 flex items-center gap-1.5">
+                            <i class="fa-solid fa-users-line text-emerald-600"></i> 班級加分：作業交齊全班 +5 分
+                        </h3>
+                        <span class="text-[11px] text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full font-medium">點擊右側按鈕記錄已加分</span>
+                    </div>
+                    <div id="dinoClassBonusList" class="space-y-2">
+                        <!-- 由 JS 動態生成作業交齊狀態與「已加+5分」勾選按鈕 -->
+                    </div>
+                </div>
+
+                <!-- 右側：100分個人 +1 分自動統計 -->
+                <div class="bg-amber-50/50 rounded-xl border border-amber-200/80 p-4 space-y-2.5">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-sm font-bold text-amber-900 flex items-center gap-1.5">
+                            <i class="fa-solid fa-star text-amber-500"></i> 個人加分：作業／考試 100 分（每項 +1 分）
+                        </h3>
+                        <span class="text-[11px] text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full font-medium" id="dinoHundredCountBadge">共 0 人獲得</span>
+                    </div>
+                    <div id="dinoPersonalBonusList" class="space-y-1.5 max-h-[260px] overflow-y-auto pr-1">
+                        <!-- 由 JS 動態生成每位獲得100分學生的累計加分與勾選狀態 -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 考卷班級平均與分數級距統計表 -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                <div class="flex items-center gap-2">
+                    <div class="bg-indigo-100 text-indigo-700 p-2 rounded-lg" id="statsIconBox">
+                        <i class="fa-solid fa-chart-column"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-base font-bold text-slate-800" id="statsTitle">507 班 — 考卷平均與分數級距統計表</h2>
+                        <p class="text-xs text-slate-500" id="statsSubtitle">自動統計「自出考卷」、「學校 A/B 卷」與「段考成績」之班平均與人數分布</p>
+                    </div>
+                </div>
+                <button onclick="copyStatsToClipboard()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 self-start sm:self-auto">
+                    <i class="fa-regular fa-copy"></i> 複製級距統計表
+                </button>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm text-center border-collapse" id="statsTable">
+                    <thead class="bg-slate-50 text-slate-700 border-b border-slate-200">
+                        <tr>
+                            <th class="py-2.5 px-3 text-left font-bold min-w-[130px]">測驗項目</th>
+                            <th class="py-2.5 px-2 font-bold text-slate-600">應考人數</th>
+                            <th class="py-2.5 px-2 font-bold text-indigo-700 bg-indigo-50/50">班級平均</th>
+                            <th class="py-2.5 px-2 font-bold text-amber-800 bg-amber-50/60">100分</th>
+                            <th class="py-2.5 px-2 font-bold text-sky-800 bg-sky-50/60">99-90分</th>
+                            <th class="py-2.5 px-2 font-bold text-emerald-800 bg-emerald-50/60">89-80分</th>
+                            <th class="py-2.5 px-2 font-bold text-indigo-800 bg-indigo-50/60">79-70分</th>
+                            <th class="py-2.5 px-2 font-bold text-orange-800 bg-orange-50/60">69-60分</th>
+                            <th class="py-2.5 px-2 font-bold text-rose-700 bg-rose-50/60">60分以下</th>
+                        </tr>
+                    </thead>
+                    <tbody id="statsBody" class="divide-y divide-slate-100">
+                        <!-- 由 JS 動態生成級距統計 -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- 批次編輯名單彈窗 (Modal) -->
+    <div id="rosterModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 class="text-lg font-bold text-slate-800" id="modalClassTitle">編輯 507 班學生名單</h3>
+                <button onclick="closeRosterModal()" class="text-slate-400 hover:text-slate-600">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+            <p class="text-sm text-slate-600">
+                請直接從 Excel 或校務系統複製「座號」與「姓名」貼在下方（每行一位學生，可用空白或 Tab 分隔，例如：<code class="bg-slate-100 px-1 rounded">1 王小明</code>）：
+            </p>
+            <textarea id="rosterTextarea" rows="10" class="w-full border border-slate-300 rounded-xl p-3 text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" placeholder="1 王小明&#10;2 陳大華&#10;3 林美美"></textarea>
+            <div class="flex justify-end gap-2 pt-2">
+                <button onclick="closeRosterModal()" class="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition">取消</button>
+                <button onclick="saveRoster()" class="px-5 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow transition">儲存名單</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 新增/修改項目名稱彈窗 (Modal) -->
+    <div id="itemModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4">
+            <h3 class="text-lg font-bold text-slate-800" id="itemModalTitle">新增成績項目</h3>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">項目名稱</label>
+                <input type="text" id="itemNameInput" class="w-full border border-slate-300 rounded-xl p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="請輸入名稱...">
+            </div>
+            <div id="syncGrade5OptionBox" class="bg-indigo-50/80 border border-indigo-200 rounded-xl p-3">
+                <label class="inline-flex items-center gap-2 cursor-pointer text-sm font-bold text-indigo-900">
+                    <input type="checkbox" id="syncGrade5Checkbox" checked class="w-4 h-4 text-indigo-600 rounded">
+                    <span>同步套用至五年級全部班級 (507～512班)</span>
+                </label>
+                <p class="text-xs text-indigo-700/80 mt-1 pl-6">勾選後，六個自然科班級會一次建立相同欄位，不用重複輸入。</p>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button onclick="closeItemModal()" class="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition">取消</button>
+                <button onclick="confirmAddColumn()" class="px-5 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow transition">確定新增</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 期末評語推薦庫彈窗 (Modal) -->
+    <div id="commentModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl max-w-2xl w-full p-6 space-y-4 max-h-[90vh] flex flex-col">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div>
+                    <h3 class="text-lg font-bold text-slate-800" id="commentModalTitle">期末評語推薦庫</h3>
+                    <p class="text-xs text-slate-500">點擊下方評語句子即可直接填入；若已有文字，可選擇「取代」或「接續附加」</p>
+                </div>
+                <button onclick="closeCommentModal()" class="text-slate-400 hover:text-slate-600">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <!-- 當前學生評語預覽與編輯框 -->
+            <div class="bg-indigo-50/60 p-3 rounded-xl border border-indigo-100 space-y-2">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold text-indigo-800">目前編輯內容：</span>
+                    <div class="flex items-center gap-3 text-xs">
+                        <label class="inline-flex items-center gap-1 cursor-pointer">
+                            <input type="radio" name="commentMode" value="replace" checked class="text-indigo-600">
+                            <span>點擊直接取代</span>
+                        </label>
+                        <label class="inline-flex items-center gap-1 cursor-pointer">
+                            <input type="radio" name="commentMode" value="append" class="text-indigo-600">
+                            <span>點擊接續附加</span>
+                        </label>
+                        <button onclick="document.getElementById('modalCommentInput').value=''" class="text-rose-600 hover:underline font-medium">清空</button>
+                    </div>
+                </div>
+                <input type="text" id="modalCommentInput" class="w-full bg-white border border-indigo-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="請點選下方推薦評語或自行輸入...">
+            </div>
+
+            <!-- 評語分類清單 -->
+            <div id="commentBankList" class="overflow-y-auto space-y-3 pr-1 flex-1">
+                <!-- 由 JS 動態生成評語庫 -->
+            </div>
+
+            <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button onclick="closeCommentModal()" class="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition">取消</button>
+                <button onclick="saveStudentCommentFromModal()" class="px-5 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow transition">確認套用評語</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 二年級體育項目「自動給分標準（尺規）」設定彈窗 (Modal) -->
+    <div id="rubricModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl max-w-2xl w-full p-6 space-y-4 max-h-[90vh] flex flex-col">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div>
+                    <h3 class="text-lg font-bold text-slate-800" id="rubricModalTitle">設定自動給分標準</h3>
+                    <p class="text-xs text-slate-500">設定完成後，在表格的「項目狀況」輸入次數（如 <code class="bg-slate-100 px-1 rounded">15</code> 或 <code class="bg-slate-100 px-1 rounded">15下</code>）或點選狀態，分數就會自動算出！</p>
+                </div>
+                <button onclick="closeRubricModal()" class="text-slate-400 hover:text-slate-600">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <div class="flex items-center justify-between bg-orange-50/70 px-3.5 py-2.5 rounded-xl border border-orange-200">
+                <label class="inline-flex items-center gap-2 cursor-pointer text-sm font-bold text-orange-900">
+                    <input type="checkbox" id="rubricEnabledCheckbox" class="w-4 h-4 text-orange-600 rounded">
+                    <span>啟用此項目的「項目狀況 ➔ 自動換算分數」功能</span>
+                </label>
+                <button type="button" onclick="applyDiaboloPresetToModal()" class="text-xs bg-white hover:bg-orange-100 text-orange-800 border border-orange-300 font-bold px-2.5 py-1 rounded-lg transition">
+                    套用「腳跨金龍」範例
+                </button>
+            </div>
+
+            <div class="overflow-y-auto space-y-4 pr-1 flex-1">
+                <!-- 區塊 A：狀態文字給分（如：不會扯=80、會扯=85、跨過=90） -->
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-slate-700"><i class="fa-solid fa-tag text-sky-600 mr-1"></i>1. 動作狀態／質性描述給分（輸入關鍵字或直接從下拉選單點選）</span>
+                        <button type="button" onclick="addRubricTextRow()" class="text-xs bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 font-bold px-2.5 py-1 rounded-lg transition">
+                            + 新增狀態規則
+                        </button>
+                    </div>
+                    <div id="rubricTextRows" class="space-y-1.5"></div>
+                </div>
+
+                <!-- 區塊 B：次數區間給分（如：1~2下=91、3~4下=92...） -->
+                <div class="space-y-2 pt-2 border-t border-slate-100">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-slate-700"><i class="fa-solid fa-arrow-up-9-1 text-orange-600 mr-1"></i>2. 次數／數量區間給分（輸入如 <code class="bg-slate-100 px-1 rounded">15</code> 或 <code class="bg-slate-100 px-1 rounded">15下</code> 會自動抓取數字比對）</span>
+                        <button type="button" onclick="addRubricRangeRow()" class="text-xs bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 font-bold px-2.5 py-1 rounded-lg transition">
+                            + 新增次數區間
+                        </button>
+                    </div>
+                    <div id="rubricRangeRows" class="space-y-1.5"></div>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button onclick="closeRubricModal()" class="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition">取消</button>
+                <button onclick="saveRubricModal()" class="px-5 py-2 text-sm font-medium bg-orange-600 hover:bg-orange-700 text-white rounded-xl shadow transition">儲存給分標準並套用</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 提示訊息 Toast -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-lg text-sm font-medium flex items-center gap-2.5 transform translate-y-20 opacity-0 transition-all duration-300 z-50">
+        <i class="fa-solid fa-circle-check text-emerald-400"></i>
+        <span id="toastMsg">操作成功</span>
+    </div>
+
+    <script>
+        const STORAGE_KEY = 'school_subject_teacher_data_115_v2';
+
+        const SUBJECT_CONFIG = {
+            grade5_science: {
+                title: '國小五年級自然科成績統整系統',
+                icon: 'fa-flask',
+                headerBg: 'bg-indigo-700',
+                classes: ['507', '508', '509', '510', '511', '512']
+            },
+            grade2_pe: {
+                title: '國小二年級體育科成績統整系統',
+                icon: 'fa-person-running',
+                headerBg: 'bg-orange-600',
+                classes: ['212', '213']
+            }
+        };
+
+        // 115學年度第一學期 507~512 班（自然）與 212~213 班（體育）預設名單
+        const PRESET_ROSTERS = {
+            '507': [
+                [1, '周宥叡'], [2, '王柏崴'], [3, '陳雍少'], [4, '陳宇宸'], [5, '王麒瑋'], [6, '王宥捷'], [7, '楊駿逸'], [8, '邵旭志'], [9, '陳宇崴'],
+                [10, '陳子圻'], [11, '吳宸睿'], [12, '林家寶'], [13, '林恆睿'], [14, '劉宸碩'], [15, '張芸毓'], [16, '楊閔惠'], [17, '張書禾'], [18, '陳幼樸'],
+                [19, '謝妤晨'], [20, '翁苡瑄'], [21, '林炘苡'], [22, '鄭云萍'], [23, '鄭晏語'], [24, '程子芩'], [25, '賴沛妘'], [26, '沈于涵'], [27, '張語']
+            ],
+            '508': [
+                [1, '洪鉢鑫'], [2, '尤兹宇'], [3, '劉明亮'], [4, '吳宥承'], [5, '賴彥呈'], [6, '黃麟鈞'], [7, '曾俊豪'], [8, '張承恩'], [9, '吳子翔'],
+                [10, '莊翔介'], [11, '奉聖荃'], [12, '陳冠瑋'], [13, '曾昱維'], [14, '簡上傑'], [15, '李品儒'], [16, '廖桂淨'], [17, '黃筠煊'], [18, '陳湘甯'],
+                [19, '陳蔓蒂'], [20, '陳嘉恩'], [21, '林妹言'], [22, '蔡沛宸'], [23, '陳禹馨'], [24, '蘇靖淇'], [25, '陳品媛'], [26, '郭欣柔'], [27, '李采潔']
+            ],
+            '509': [
+                [1, '周建逸'], [2, '賴柏充'], [3, '蔡士朋'], [4, '劉彧安'], [5, '蔡晉瑛'], [6, '葉宸熏'], [7, '沈子峻'], [8, '宋峻宇'], [9, '傅柄榮'],
+                [10, '郭宸均'], [11, '陳宇宸'], [12, '鄭宸耀'], [13, '游丞宥'], [14, '王茂森'], [15, '許恒輔'], [16, '吳欣瞳'], [17, '歐芷函'], [18, '曾芯喬'],
+                [19, '陳韻茹'], [20, '吳采芯'], [21, '林昕璇'], [22, '楊巧歆'], [23, '楊紫淇'], [24, '林品璇'], [25, '李云萱'], [26, '汪慶瑜'], [27, '陳家葳']
+            ],
+            '510': [
+                [1, '黃宥承'], [2, '陳軍升'], [3, '蔡尚築'], [4, '康予軒'], [5, '施翔竣'], [6, '曾士杰'], [7, '林祐宇'], [8, '謝源祐'], [9, '蘇彥睿'],
+                [10, '龔辰昊'], [11, '鄭鉑澔'], [12, '盧浩允'], [13, '黃名綸'], [14, '林祐諄'], [15, '林秀雯'], [16, '張宸嘉'], [17, '洪若曦'], [18, '黃梓菲'],
+                [19, '林容瑄'], [20, '鄭聿忻'], [21, '曾佳婕'], [22, '曾弈晴'], [23, '劉宣彤'], [24, '賴沛辰'], [25, '郭昀霏'], [26, '李子妍'], [27, '蔡羽璇']
+            ],
+            '511': [
+                [1, '陳子祺'], [2, '謝宗翰'], [3, '黃柏又'], [4, '廖進程'], [5, '李宇馨'], [6, '陳宥榮'], [7, '韋岑熙'], [8, '陳禹宸'], [9, '周品誼'],
+                [10, '沈彥呈'], [11, '張允謙'], [12, '謝梓沁'], [13, '蔡沂紘'], [14, '吳秉諺'], [15, '鍾秣'], [16, '吳宇馨'], [17, '李容萱'], [18, '陳柏瑜'],
+                [19, '林宜'], [20, '王怡棻'], [21, '吳苡筑'], [22, '陳韻涵'], [23, '林昕穎'], [24, '張悅恩'], [25, '丁品睿'], [26, '林宣佑'], [27, '王思甯']
+            ],
+            '512': [
+                [1, '吳祺煜'], [2, '謝承峰'], [3, '高暐彥'], [4, '張軒睿'], [5, '李易隆'], [6, '陳映睿'], [7, '白宥鈞'], [8, '黃弘逸'], [9, '吳柏澔'],
+                [10, '高翊程'], [11, '黃冠穎'], [12, '王淳皓'], [13, '石昕誠'], [14, '陳彥皓'], [15, '顏歆瞳'], [16, '李羿霏'], [17, '林昀霏'], [18, '劉芷函'],
+                [19, '陳詩晴'], [20, '林品榛'], [21, '黃詣文'], [22, '謝昕悅'], [23, '謝筑丞'], [24, '柯姵綺'], [25, '陳予璇'], [26, '曾映嘉']
+            ],
+            '212': [
+                [1, '洪駿鍇'], [3, '陳祐睿'], [4, '許祐瑋'], [5, '張焜喆'], [6, '陳垣愷'], [7, '張恩瑞'], [8, '鄭棨澤'], [9, '施博勝'], [10, '駱冠宇'],
+                [11, '楊瀚'], [12, '蔡梓宥'], [13, '黃庠云'], [14, '蔡承諭'], [15, '呂沐盼'], [16, '鄭恩'], [17, '余安芝'], [18, '呂馥讌'], [19, '陳芊靜'],
+                [20, '陳芊慈'], [21, '林芯彤'], [22, '劉艾菲'], [23, '黃上瑄'], [24, '蔣采彤'], [25, '吳宜珊'], [26, '黃墨妍']
+            ],
+            '213': [
+                [1, '陳予晨'], [2, '劉亦澄'], [3, '林彥澄'], [4, '劉宥均'], [5, '黃樂平'], [6, '牛印朋'], [7, '鄭彥閎'], [8, '陳韋辰'], [9, '周宇翔'],
+                [10, '童廷'], [11, '呂權育'], [12, '楊孟璟'], [13, '廖丞安'], [14, '許沅鋐'], [15, '林汶謙'], [16, '陳姵岑'], [17, '戴子淇'], [18, '粘煊晴'],
+                [19, '謝昀熹'], [20, '洪語希'], [21, '林妤煊'], [22, '程子菲'], [23, '宋芯'], [24, '林子甯'], [25, '李瑋芸'], [26, '林沐曦']
+            ]
+        };
+
+        // 五年級自然科期末評語推薦庫
+        const SCIENCE_COMMENT_BANK = [
+            {
+                category: '🌟 優異表現與科學素養',
+                color: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+                items: [
+                    '自然科學概念清晰，實驗觀察敏銳且能精準歸納結論，表現優異。',
+                    '對自然科學充滿好奇心，上課勇於發表見解，具良好的科學探究精神。',
+                    '能將課堂所學自然知識靈活運用於生活中，平時測驗與作業皆表現出色。'
+                ]
+            },
+            {
+                category: '🔬 實驗操作與小組合作',
+                color: 'bg-blue-50 text-blue-800 border-blue-200',
+                items: [
+                    '進行自然實驗時態度專注謹慎，能遵守安全規範並與組員分工合作。',
+                    '實驗操作細心有條理，能確實記錄觀察結果並完成自然習作。',
+                    '在小組探究活動中熱心協助同學，展現良好的團隊合作精神。'
+                ]
+            },
+            {
+                category: '📝 學習態度與作業表現',
+                color: 'bg-amber-50 text-amber-800 border-amber-200',
+                items: [
+                    '上課專心聽講，自然習作與作業簿書寫工整確實，學習態度認真。',
+                    '學習態度穩健踏實，能按時完成各項作業與複習，值得嘉許。',
+                    '課堂參與度高，筆記整理用心，能掌握各單元核心概念。'
+                ]
+            },
+            {
+                category: '📈 進步與鼓勵',
+                color: 'bg-purple-50 text-purple-800 border-purple-200',
+                items: [
+                    '本學期自然科學習態度愈趨積極，測驗成績明顯進步，請繼續保持！',
+                    '課堂專注力有所提升，若能多加複習單元重點，表現會更加亮眼。',
+                    '勇於嘗試實驗操作，若能再加強平時考前的複習，成績定能更上一層樓。'
+                ]
+            },
+            {
+                category: '💡 需加強與提醒',
+                color: 'bg-rose-50 text-rose-800 border-rose-200',
+                items: [
+                    '上課較容易分心，建議多專注於老師講解與實驗步驟，並按時繳交習作。',
+                    '自然基本觀念仍需加強，建議課後多複習課本重點與平時考卷錯題。',
+                    '作業繳交偶有遲交情形，期許下學期能培養更自律的學習習慣。'
+                ]
+            }
+        ];
+
+        // 二年級體育科期末評語推薦庫
+        const PE_COMMENT_BANK = [
+            {
+                category: '🏅 體能表現與民俗體育技巧',
+                color: 'bg-amber-50 text-amber-800 border-amber-200',
+                items: [
+                    '肢體協調性極佳，跳繩、扯鈴與踢毽子動作流暢熟練，體育表現優異。',
+                    '運動能力佳，能精準掌握扯鈴與跳繩節奏，展現良好的身體控制力。',
+                    '動作敏捷靈活，各項體育測驗皆能全力以赴並獲得優異成績。'
+                ]
+            },
+            {
+                category: '🤝 運動精神與團隊合作',
+                color: 'bg-sky-50 text-sky-800 border-sky-200',
+                items: [
+                    '熱愛運動且富有團隊精神，活動時能與同學互助合作、遵守遊戲規則。',
+                    '具有良好運動家風度，勝不驕敗不餒，並能主動鼓勵同組同學。',
+                    '上課活潑有朝氣，能積極參與團體活動並協助老師收拾體育器材。'
+                ]
+            },
+            {
+                category: '📈 認真練習與進步肯定',
+                color: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+                items: [
+                    '學習態度認真，課堂上反覆練習跳繩與毽子技巧，進步幅度顯著！',
+                    '面對不熟悉的民俗體育動作不輕言放棄，肯努力練習，值得嘉許。',
+                    '能依老師指導調整動作姿勢，體能與技巧皆比學期初進步許多。'
+                ]
+            },
+            {
+                category: '💡 專注力與安全提醒',
+                color: 'bg-rose-50 text-rose-800 border-rose-200',
+                items: [
+                    '活動時容易興奮分心，建議多注意聽從老師哨音與安全規範。',
+                    '肢體協調性仍可再加強，建議課餘時間多練習跳繩與接拋動作。',
+                    '上課偶有追逐嬉戲情形，期許能更注重自身與同學的運動安全。'
+                ]
+            }
+        ];
+
+        // 依分數回傳對應的級距色彩樣式（100黃、99-90藍、89-80綠、79-70紫、69-60橘、60以下紅）
+        function getScoreColorClasses(val, isBadge = false) {
+            if (val === undefined || val === null || val === '' || val === '-' || isNaN(parseFloat(val))) {
+                return isBadge ? 'text-slate-400' : '';
+            }
+            const score = parseFloat(val);
+            if (score >= 100) {
+                return isBadge 
+                    ? 'bg-amber-100 text-amber-800 font-bold' 
+                    : 'bg-amber-100/90 text-amber-800 font-bold border-amber-300';
+            } else if (score >= 90) {
+                return isBadge 
+                    ? 'bg-sky-100 text-sky-800 font-bold' 
+                    : 'bg-sky-100/80 text-sky-800 font-bold border-sky-200';
+            } else if (score >= 80) {
+                return isBadge 
+                    ? 'bg-emerald-100 text-emerald-800 font-bold' 
+                    : 'bg-emerald-100/75 text-emerald-800 font-semibold border-emerald-200';
+            } else if (score >= 70) {
+                return isBadge 
+                    ? 'bg-indigo-100 text-indigo-800 font-bold' 
+                    : 'bg-indigo-100/70 text-indigo-800 font-semibold border-indigo-200';
+            } else if (score >= 60) {
+                return isBadge 
+                    ? 'bg-orange-100 text-orange-800 font-bold' 
+                    : 'bg-orange-100/80 text-orange-800 font-semibold border-orange-200';
+            } else {
+                return isBadge 
+                    ? 'bg-rose-100 text-rose-700 font-bold' 
+                    : 'bg-rose-100/90 text-rose-700 font-bold border-rose-300';
+            }
+        }
+
+        // 系統狀態資料結構
+        let appData = {
+            currentSubject: 'grade5_science',
+            currentClassBySubject: {
+                'grade5_science': '507',
+                'grade2_pe': '212'
+            },
+            regularWeight: 50,
+            classes: {}
+        };
+
+        let pendingCategory = null;
+        let pendingCheckOnly = false;
+        let editingCommentRowIdx = null;
+        let editingRubricColId = null;
+
+        // 預設「1分鐘扯鈴腳跨金龍」自動給分尺規
+        function getDefaultDiaboloRubric() {
+            return {
+                enabled: true,
+                textRules: [
+                    { label: '不會扯', score: 80 },
+                    { label: '會扯', score: 85 },
+                    { label: '會扯且腳正確跨過', score: 90 }
+                ],
+                rangeRules: [
+                    { min: 1, max: 2, score: 91 },
+                    { min: 3, max: 4, score: 92 },
+                    { min: 5, max: 6, score: 93 },
+                    { min: 7, max: 10, score: 94 },
+                    { min: 11, max: 20, score: 95 },
+                    { min: 21, max: 30, score: 96 },
+                    { min: 31, max: 40, score: 97 },
+                    { min: 41, max: 50, score: 98 },
+                    { min: 51, max: 60, score: 99 },
+                    { min: 61, max: 999, score: 100 }
+                ]
+            };
+        }
+
+        // 依據項目給分標準，將「項目狀況文字/次數」自動換算為分數（若無匹配則回傳 null）
+        function evaluateRubricScore(rubric, recordText) {
+            if (!rubric || !rubric.enabled || !recordText) return null;
+            const clean = recordText.trim();
+            if (!clean) return null;
+
+            // 1. 優先比對完全符合的文字狀態（避免「會扯」誤判「不會扯」）
+            const textRules = rubric.textRules || [];
+            const exactText = textRules.find(r => r.label && r.label.trim() === clean);
+            if (exactText && exactText.score !== '' && !isNaN(parseFloat(exactText.score))) {
+                return parseFloat(exactText.score);
+            }
+
+            // 2. 若文字內包含數字（例如 "15"、"15下"、"跳50下"），比對次數區間
+            const numMatch = clean.match(/(\d+(\.\d+)?)/);
+            if (numMatch) {
+                const num = parseFloat(numMatch[1]);
+                const rangeRules = rubric.rangeRules || [];
+                for (const r of rangeRules) {
+                    const minVal = r.min !== '' && r.min !== null ? parseFloat(r.min) : -Infinity;
+                    const maxVal = r.max !== '' && r.max !== null ? parseFloat(r.max) : Infinity;
+                    if (num >= minVal && num <= maxVal && r.score !== '' && !isNaN(parseFloat(r.score))) {
+                        return parseFloat(r.score);
+                    }
+                }
+            }
+
+            // 3. 部分關鍵字比對（由關鍵字較長者優先比對）
+            const sortedTextRules = [...textRules]
+                .filter(r => r.label && r.label.trim() !== '')
+                .sort((a, b) => b.label.trim().length - a.label.trim().length);
+            for (const r of sortedTextRules) {
+                if (clean.includes(r.label.trim()) && r.score !== '' && !isNaN(parseFloat(r.score))) {
+                    return parseFloat(r.score);
+                }
+            }
+
+            return null;
+        }
+
+        // 判断欄位屬於「考卷/測驗類」、「上課表現(排除自動缺交)」或「一般作業類」
+        function getColumnTrackType(col) {
+            if (col.id === 'examScore' || col.category === 'quiz' || col.category === 'abtest' || col.category === 'pe') {
+                return 'exam'; // 顯示「缺考」
+            }
+            if (col.name && col.name.includes('上課表現')) {
+                return 'ignore_blank'; // 上課表現留白不計入缺交
+            }
+            return 'homework'; // 顯示「缺交」
+        }
+
+        // 判斷該生在該欄位是否處於「未完成訂正」狀態（自然科計分項目未滿100分預設即為未訂正，除非手動標記 corrected）
+        function isStudentNeedsCorrection(stu, col, val) {
+            const colId = typeof col === 'string' ? col : col.id;
+            const st = stu.statuses && stu.statuses[colId];
+            if (st === 'corrected') return false;
+            if (st === 'correction') return true;
+
+            // 只在五年級自然科的計分項目啟用「未滿 100 分自動未訂正」
+            if (appData.currentSubject === 'grade5_science') {
+                const isCheckOnly = typeof col === 'object' && col.checkOnly;
+                const isAttitude = typeof col === 'object' && col.name && col.name.includes('上課表現');
+                if (!isCheckOnly && !isAttitude && val !== '' && val !== undefined && val !== null && !isNaN(parseFloat(val))) {
+                    return parseFloat(val) < 100;
+                }
+            }
+            return false;
+        }
+
+        // 建立單一班級的預設資料結構
+        function createDefaultClassData(cls) {
+            const isPE = cls.startsWith('2');
+            const roster = PRESET_ROSTERS[cls] || [];
+            const students = roster.map(([seat, name]) => ({
+                id: `stu_${cls}_${seat}`,
+                seat: seat,
+                name: name,
+                scores: {},
+                records: {},
+                statuses: {},
+                peBonus: 0,
+                examScore: '',
+                comment: ''
+            }));
+
+            const columns = isPE ? [
+                { id: `col_${cls}_pe1`, category: 'pe', name: '1分鐘跳繩', weight: 20 },
+                { id: `col_${cls}_pe2`, category: 'pe', name: '1分鐘扯鈴腳跨金龍', weight: 20, rubric: getDefaultDiaboloRubric() },
+                { id: `col_${cls}_pe3`, category: 'pe', name: '毽子拋踢接', weight: 20 },
+                { id: `col_${cls}_pe4`, category: 'pe', name: '上課表現', weight: 40 }
+            ] : [
+                { id: `col_${cls}_q1`, category: 'quiz', name: '平時考1' },
+                { id: `col_${cls}_h1`, category: 'homework', name: '自然習作' },
+                { id: `col_${cls}_h2`, category: 'homework', name: '上課表現' },
+                { id: `col_${cls}_ab1`, category: 'abtest', name: 'A卷' }
+            ];
+
+            return {
+                students,
+                columns,
+                dinoClassAwarded: {},
+                dinoPersonalAwarded: {}
+            };
+        }
+
+        // 初始化所有班級（507~512 與 212~213）的預設資料
+        function initDefaultData() {
+            Object.keys(PRESET_ROSTERS).forEach(cls => {
+                appData.classes[cls] = createDefaultClassData(cls);
+            });
+        }
+
+        // 一鍵套用 115 學年度所有班級名單（保留既有同座號成績與評語，並補齊體育「上課表現」欄位）
+        function resetToPresetRosters() {
+            Object.keys(PRESET_ROSTERS).forEach(cls => {
+                const fresh = createDefaultClassData(cls);
+                const old = appData.classes[cls];
+                if (old && old.students) {
+                    const oldMap = {};
+                    old.students.forEach(s => { oldMap[s.seat] = s; });
+                    fresh.students.forEach(s => {
+                        if (oldMap[s.seat]) {
+                            s.scores = oldMap[s.seat].scores || {};
+                            s.records = oldMap[s.seat].records || {};
+                            s.statuses = oldMap[s.seat].statuses || {};
+                            s.examScore = oldMap[s.seat].examScore ?? '';
+                            s.comment = oldMap[s.seat].comment || '';
+                        }
+                    });
+                    if (old.columns && old.columns.length > 0) {
+                        const existingNames = new Set(old.columns.map(c => c.name));
+                        fresh.columns.forEach(fc => {
+                            if (!existingNames.has(fc.name)) old.columns.push(fc);
+                        });
+                        // 若為二年級體育，同步補上預設權重（上課表現 40%、其他 20%）
+                        if (cls.startsWith('2')) {
+                            old.columns.forEach(c => {
+                                if (c.weight === undefined) {
+                                    c.weight = c.name.includes('上課表現') ? 40 : 20;
+                                }
+                            });
+                        }
+                        fresh.columns = old.columns;
+                    }
+                    fresh.dinoClassAwarded = old.dinoClassAwarded || {};
+                    fresh.dinoPersonalAwarded = old.dinoPersonalAwarded || {};
+                }
+                appData.classes[cls] = fresh;
+            });
+            saveData();
+            renderAll();
+            showToast('已套用 115 學年度完整名單與預設欄位！');
+        }
+
+        // 取得輸入框狀態樣式（正常 / 未訂正 / 缺交或缺考）
+        function getStatusDecorClasses(stu, col, val) {
+            const colId = typeof col === 'string' ? col : col.id;
+            const trackType = typeof col === 'string' ? (col === 'examScore' ? 'exam' : 'homework') : getColumnTrackType(col);
+            const st = stu.statuses && stu.statuses[colId];
+            if (isStudentNeedsCorrection(stu, col, val)) {
+                return ' ring-2 ring-amber-500 bg-amber-50 text-amber-900 font-bold';
+            }
+            if (st === 'missing') {
+                return ' border-dashed border-rose-400 bg-rose-50/70';
+            }
+            if (trackType !== 'ignore_blank' && (val === '' || val === undefined || val === null)) {
+                return ' border-dashed border-rose-300 bg-rose-50/40';
+            }
+            return '';
+        }
+
+        // 右鍵切換分數格子狀態：未訂正 <-> 已訂正（若留白則切換缺交/缺考標記）
+        function toggleCellStatus(e, rowIdx, colId) {
+            e.preventDefault();
+            const clsData = appData.classes[getCurrentClass()];
+            const stu = clsData.students[rowIdx];
+            const colObj = colId === 'examScore' ? { id: 'examScore', category: 'exam', name: '段考' } : clsData.columns.find(c => c.id === colId);
+            const val = colId === 'examScore' ? stu.examScore : stu.scores[colId];
+            const missingWord = getColumnTrackType(colObj) === 'exam' ? '缺考' : '缺交';
+            if (!stu.statuses) stu.statuses = {};
+
+            const cur = stu.statuses[colId] || '';
+            const hasScore = val !== '' && val !== undefined && val !== null && !isNaN(parseFloat(val));
+            let next = '';
+            let label = '';
+
+            if (hasScore) {
+                // 已有分數時：在「未完成訂正」與「✔ 已完成訂正」之間一鍵切換
+                if (isStudentNeedsCorrection(stu, colObj, val)) {
+                    next = 'corrected';
+                    label = '✔ 已完成訂正（已從未訂正名單移除）';
+                } else {
+                    next = 'correction';
+                    label = '未完成訂正';
+                }
+            } else {
+                // 格子留白時：切換手動缺交/缺考或未訂正
+                if (cur === '') {
+                    next = 'correction';
+                    label = '未完成訂正';
+                } else {
+                    next = '';
+                    label = `清除標記（目前留白仍列為${missingWord}）`;
+                }
+            }
+
+            if (next === '') {
+                delete stu.statuses[colId];
+            } else {
+                stu.statuses[colId] = next;
+            }
+            saveData();
+            renderTableBody();
+            showToast(`${stu.seat}號 ${stu.name}：【${label}】`);
+        }
+
+        // 左鍵或右鍵切換「只檢查、不計分」項目的狀態：未交(預設留白) -> 已過關(done) -> 未訂正(correction) -> 未交
+        function toggleCheckOnlyStatus(e, rowIdx, colId) {
+            if (e) e.preventDefault();
+            const clsData = appData.classes[getCurrentClass()];
+            const stu = clsData.students[rowIdx];
+            if (!stu.statuses) stu.statuses = {};
+
+            const cur = stu.statuses[colId] || '';
+            let next = '';
+            if (cur === '' || cur === 'missing') {
+                next = 'done';
+            } else if (cur === 'done') {
+                next = 'correction';
+            } else {
+                next = '';
+            }
+
+            if (next === '') {
+                delete stu.statuses[colId];
+            } else {
+                stu.statuses[colId] = next;
+            }
+            saveData();
+            renderTableBody();
+        }
+
+        // 從 LocalStorage 讀取本機資料
+        function loadData() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    appData = { ...appData, ...parsed };
+                    Object.keys(PRESET_ROSTERS).forEach(cls => {
+                        if (!appData.classes[cls]) {
+                            appData.classes[cls] = createDefaultClassData(cls);
+                        }
+                    });
+                    // 自動剔除 508 班 28 號與 512 班 27 號自學生
+                    if (appData.classes['508'] && appData.classes['508'].students) {
+                        appData.classes['508'].students = appData.classes['508'].students.filter(s => s.seat !== 28);
+                    }
+                    if (appData.classes['512'] && appData.classes['512'].students) {
+                        appData.classes['512'].students = appData.classes['512'].students.filter(s => s.seat !== 27);
+                    }
+                } else {
+                    initDefaultData();
+                    saveData();
+                }
+            } catch (e) {
+                console.error('讀取資料失敗，使用預設值', e);
+                initDefaultData();
+            }
+        }
+
+        // 儲存資料至 LocalStorage
+        function saveData() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
+            } catch (e) {
+                showToast('儲存失敗，瀏覽器空間可能已滿', true);
+            }
+        }
+
+        // 顯示提示訊息
+        function showToast(msg, isError = false) {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toastMsg');
+            const icon = toast.querySelector('i');
+            
+            toastMsg.textContent = msg;
+            icon.className = isError ? 'fa-solid fa-circle-exclamation text-rose-400' : 'fa-solid fa-circle-check text-emerald-400';
+
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 2600);
+        }
+
+        // 取得目前正在操作的班級代碼
+        function getCurrentClass() {
+            return appData.currentClassBySubject[appData.currentSubject];
+        }
+
+        // 切換科目（五年級自然 / 二年級體育）
+        function switchSubject(subj) {
+            appData.currentSubject = subj;
+            saveData();
+            renderAll();
+        }
+
+        // 切換班級
+        function switchClass(cls) {
+            appData.currentClassBySubject[appData.currentSubject] = cls;
+            saveData();
+            renderAll();
+        }
+
+        // 更新平時/段考佔比設定
+        function updateGlobalSettings() {
+            let val = parseInt(document.getElementById('regularWeightInput').value);
+            if (isNaN(val) || val < 0) val = 0;
+            if (val > 100) val = 100;
+            appData.regularWeight = val;
+            document.getElementById('regularWeightInput').value = val;
+            document.getElementById('examWeightDisplay').textContent = 100 - val;
+            saveData();
+            renderTableBody();
+            showToast(`已更新比例：平時 ${val}% / 段考 ${100 - val}%`);
+        }
+
+        // 更新頂部主題色與科目介面切換
+        function renderSubjectUI() {
+            const isPE = appData.currentSubject === 'grade2_pe';
+            const cfg = SUBJECT_CONFIG[appData.currentSubject];
+
+            const header = document.getElementById('mainHeader');
+            header.className = `${cfg.headerBg} text-white shadow-md transition-colors duration-300`;
+            document.getElementById('headerTitle').textContent = cfg.title;
+            document.getElementById('headerIcon').className = `fa-solid ${cfg.icon} text-2xl`;
+
+            const tabSci = document.getElementById('tab-grade5_science');
+            const tabPe = document.getElementById('tab-grade2_pe');
+            if (isPE) {
+                tabPe.className = 'px-3.5 py-1.5 rounded-lg text-sm font-bold bg-white text-orange-700 shadow transition flex items-center gap-1.5';
+                tabSci.className = 'px-3.5 py-1.5 rounded-lg text-sm font-medium text-white/90 hover:text-white transition flex items-center gap-1.5';
+            } else {
+                tabSci.className = 'px-3.5 py-1.5 rounded-lg text-sm font-bold bg-white text-indigo-800 shadow transition flex items-center gap-1.5';
+                tabPe.className = 'px-3.5 py-1.5 rounded-lg text-sm font-medium text-white/90 hover:text-white transition flex items-center gap-1.5';
+            }
+
+            document.getElementById('scienceCategoryPanel').classList.toggle('hidden', isPE);
+            document.getElementById('peCategoryPanel').classList.toggle('hidden', !isPE);
+            document.getElementById('weightSettingBox').classList.toggle('hidden', isPE);
+            document.getElementById('dinoTrackerPanel').classList.toggle('hidden', isPE);
+            document.getElementById('peInfoBadge').classList.toggle('hidden', !isPE);
+            if (isPE) document.getElementById('peInfoBadge').classList.add('flex');
+
+            const copyBox = document.getElementById('copyButtonsContainer');
+            if (isPE) {
+                copyBox.innerHTML = `
+                    <button onclick="copyColumnToClipboard('regularTotal')" class="bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium px-4 py-2 rounded-xl shadow-sm transition flex items-center gap-2">
+                        <i class="fa-regular fa-copy"></i> 複製「體育平時總分」
+                    </button>
+                    <button onclick="copyColumnToClipboard('comment')" class="bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-4 py-2 rounded-xl shadow-sm transition flex items-center gap-2">
+                        <i class="fa-regular fa-comment-dots"></i> 複製「期末評語」
+                    </button>
+                `;
+            } else {
+                copyBox.innerHTML = `
+                    <button onclick="copyColumnToClipboard('regularTotal')" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-xl shadow-sm transition flex items-center gap-2">
+                        <i class="fa-regular fa-copy"></i> 複製「平時總分」
+                    </button>
+                    <button onclick="copyColumnToClipboard('examScore')" class="bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium px-4 py-2 rounded-xl shadow-sm transition flex items-center gap-2">
+                        <i class="fa-regular fa-copy"></i> 複製「段考成績」
+                    </button>
+                    <button onclick="copyColumnToClipboard('comment')" class="bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium px-4 py-2 rounded-xl shadow-sm transition flex items-center gap-2">
+                        <i class="fa-regular fa-comment-dots"></i> 複製「期末評語」
+                    </button>
+                `;
+            }
+        }
+
+        // 渲染班級分頁按鈕
+        function renderClassTabs() {
+            const container = document.getElementById('classTabs');
+            container.innerHTML = '';
+            const currentCls = getCurrentClass();
+            const classList = SUBJECT_CONFIG[appData.currentSubject].classes;
+            const activeBg = appData.currentSubject === 'grade2_pe' ? 'bg-orange-600' : 'bg-indigo-600';
+
+            classList.forEach(cls => {
+                const isActive = currentCls === cls;
+                const btn = document.createElement('button');
+                btn.className = isActive 
+                    ? `px-4 py-2 rounded-xl font-bold text-sm ${activeBg} text-white shadow-sm transition`
+                    : 'px-4 py-2 rounded-xl font-medium text-sm bg-slate-100 text-slate-600 hover:bg-slate-200 transition';
+                btn.textContent = `${cls} 班`;
+                btn.onclick = () => switchClass(cls);
+                container.appendChild(btn);
+            });
+        }
+
+        // 渲染項目管理卡片中的標籤
+        function renderCategoryTags() {
+            const clsData = appData.classes[getCurrentClass()];
+            const isPE = appData.currentSubject === 'grade2_pe';
+
+            if (isPE) {
+                const container = document.getElementById('items-pe');
+                container.innerHTML = '';
+                let totalW = 0;
+                clsData.columns.forEach(col => {
+                    const w = col.weight !== undefined ? parseFloat(col.weight) : (col.name.includes('上課表現') ? 40 : 20);
+                    totalW += isNaN(w) ? 0 : w;
+                    const hasRubric = col.rubric && col.rubric.enabled;
+                    const isAttitude = col.name.includes('上課表現');
+                    const badge = document.createElement('div');
+                    badge.className = `inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs font-medium ${isAttitude ? 'bg-amber-50 text-amber-950 border-amber-300' : 'bg-orange-50 text-orange-900 border-orange-200'}`;
+                    badge.innerHTML = `
+                        <button type="button" onclick="moveColumn('${col.id}', -1)" title="往前移動順序" class="px-1 text-slate-400 hover:text-orange-700 transition"><i class="fa-solid fa-caret-left"></i></button>
+                        <span class="font-bold">${col.name}</span>
+                        <div class="inline-flex items-center bg-white border border-orange-300 rounded px-1.5 py-0.5 ml-0.5" title="調整此項目佔體育總分的百分比（212/213同步）">
+                            <input type="number" min="0" max="100" step="5" value="${w}"
+                                onchange="updatePeColumnWeight('${col.id}', this.value)"
+                                class="w-10 text-center font-bold text-orange-700 outline-none bg-transparent">
+                            <span class="text-[11px] text-slate-500">%</span>
+                        </div>
+                        <button onclick="openRubricModal('${col.id}')" title="設定此項目的自動給分標準（212/213同步）" class="ml-0.5 px-2 py-0.5 rounded text-[11px] font-bold transition flex items-center gap-1 ${hasRubric ? 'bg-orange-600 text-white' : 'bg-white text-orange-700 border border-orange-300 hover:bg-orange-100'}">
+                            <i class="fa-solid fa-gear"></i> ${hasRubric ? '自動算分' : '設標準'}
+                        </button>
+                        <button type="button" onclick="moveColumn('${col.id}', 1)" title="往後移動順序" class="px-1 text-slate-400 hover:text-orange-700 transition"><i class="fa-solid fa-caret-right"></i></button>
+                        <button onclick="deleteColumn('${col.id}')" title="刪除此項目（212/213同步）" class="hover:text-rose-600 ml-0.5">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    `;
+                    container.appendChild(badge);
+                });
+                const totalBadge = document.getElementById('peWeightTotalBadge');
+                if (totalBadge) {
+                    totalBadge.textContent = `目前權重總和：${totalW}%`;
+                    totalBadge.className = totalW === 100
+                        ? 'bg-emerald-100 text-emerald-800 text-xs font-bold px-2.5 py-0.5 rounded-full'
+                        : 'bg-rose-100 text-rose-800 text-xs font-bold px-2.5 py-0.5 rounded-full';
+                }
+                return;
+            }
+
+            const containers = {
+                quiz: document.getElementById('items-quiz'),
+                homework: document.getElementById('items-homework'),
+                abtest: document.getElementById('items-abtest')
+            };
+
+            Object.values(containers).forEach(el => el.innerHTML = '');
+
+            clsData.columns.forEach(col => {
+                if (!containers[col.category]) return;
+                const badge = document.createElement('div');
+                let colorClass = 'bg-blue-50 text-blue-800 border-blue-200';
+                if (col.category === 'homework') {
+                    colorClass = col.checkOnly
+                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                        : 'bg-amber-50 text-amber-800 border-amber-200';
+                } else if (col.category === 'abtest') {
+                    colorClass = 'bg-purple-50 text-purple-800 border-purple-200';
+                }
+
+                badge.className = `inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-xs font-medium ${colorClass}`;
+                badge.innerHTML = `
+                    <button type="button" onclick="moveColumn('${col.id}', -1)" title="往前移動順序（五年級全同步）" class="px-0.5 opacity-60 hover:opacity-100 transition"><i class="fa-solid fa-caret-left"></i></button>
+                    <span>${col.name}${col.checkOnly ? ' <span class="text-[10px] opacity-75">(只檢查)</span>' : ''}</span>
+                    <button type="button" onclick="moveColumn('${col.id}', 1)" title="往後移動順序（五年級全同步）" class="px-0.5 opacity-60 hover:opacity-100 transition"><i class="fa-solid fa-caret-right"></i></button>
+                    <button onclick="deleteColumn('${col.id}')" title="刪除此項目" class="hover:text-rose-600 ml-0.5">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                `;
+                containers[col.category].appendChild(badge);
+            });
+        }
+
+        // 左右移動項目順序（五年級自然 507~512 同步；二年級體育 212~213 同步）
+        function moveColumn(colId, direction) {
+            const clsData = appData.classes[getCurrentClass()];
+            const target = clsData.columns.find(c => c.id === colId);
+            if (!target) return;
+
+            const isPE = appData.currentSubject === 'grade2_pe';
+            const targetClasses = isPE ? SUBJECT_CONFIG.grade2_pe.classes : SUBJECT_CONFIG.grade5_science.classes;
+
+            let moved = false;
+            targetClasses.forEach(cls => {
+                const cData = appData.classes[cls];
+                if (!cData) return;
+                // 找出該班同類別中的索引位置
+                const sameCatIndices = [];
+                cData.columns.forEach((c, i) => {
+                    if (c.category === target.category) sameCatIndices.push(i);
+                });
+                const posInCat = sameCatIndices.findIndex(idx => cData.columns[idx].name === target.name);
+                if (posInCat === -1) return;
+
+                const swapPos = posInCat + direction;
+                if (swapPos < 0 || swapPos >= sameCatIndices.length) return;
+
+                const idxA = sameCatIndices[posInCat];
+                const idxB = sameCatIndices[swapPos];
+                const temp = cData.columns[idxA];
+                cData.columns[idxA] = cData.columns[idxB];
+                cData.columns[idxB] = temp;
+                moved = true;
+            });
+
+            if (moved) {
+                saveData();
+                renderAll();
+                showToast(`已調整「${target.name}」的顯示順序`);
+            }
+        }
+
+        // 更新二年級體育單一項目的權重百分比（212 與 213 班同步更新）
+        function updatePeColumnWeight(colId, newWeight) {
+            const clsData = appData.classes[getCurrentClass()];
+            const col = clsData.columns.find(c => c.id === colId);
+            if (!col) return;
+            let val = parseFloat(newWeight);
+            if (isNaN(val) || val < 0) val = 0;
+            if (val > 100) val = 100;
+
+            SUBJECT_CONFIG.grade2_pe.classes.forEach(cls => {
+                const cData = appData.classes[cls];
+                if (!cData) return;
+                const matchCol = cData.columns.find(c => c.name === col.name);
+                if (matchCol) matchCol.weight = val;
+            });
+
+            saveData();
+            renderAll();
+            showToast(`已將 212、213 班「${col.name}」權重同步調整為 ${val}%`);
+        }
+
+        // 開啟新增項目視窗
+        function addColumn(category, checkOnly = false) {
+            pendingCategory = category;
+            pendingCheckOnly = checkOnly;
+            const titles = {
+                quiz: '新增「自己出的考卷 (25%)」項目',
+                homework: checkOnly ? '新增「只檢查作業／回條 (不計入分數)」項目' : '新增「作業與上課表現 (50%)」計分項目',
+                abtest: '新增「學校 A/B 卷 (25%)」項目',
+                pe: '新增「二年級體育測驗」項目'
+            };
+            document.getElementById('itemModalTitle').textContent = titles[category] || '新增成績項目';
+            document.getElementById('itemNameInput').placeholder = checkOnly
+                ? '例如：習作第1單元檢查、實驗單訂正、家長簽名...'
+                : (category === 'pe' ? '例如：立定跳遠、拍球30秒...' : '例如：第一單元考卷、習作P10-20...');
+            document.getElementById('itemNameInput').value = '';
+
+            // 僅在五年級自然科顯示「同步套用至 507~512 班」勾選框，且預設勾選
+            const syncBox = document.getElementById('syncGrade5OptionBox');
+            const syncChk = document.getElementById('syncGrade5Checkbox');
+            if (appData.currentSubject === 'grade5_science' && category !== 'pe') {
+                syncBox.classList.remove('hidden');
+                syncChk.checked = true;
+            } else {
+                syncBox.classList.add('hidden');
+                syncChk.checked = false;
+            }
+
+            document.getElementById('itemModal').classList.remove('hidden');
+            setTimeout(() => document.getElementById('itemNameInput').focus(), 100);
+        }
+
+        function closeItemModal() {
+            document.getElementById('itemModal').classList.add('hidden');
+            pendingCategory = null;
+            pendingCheckOnly = false;
+        }
+
+        // 確認新增項目（支援五年級 507~512 班一鍵同步建立）
+        function confirmAddColumn() {
+            const name = document.getElementById('itemNameInput').value.trim();
+            if (!name) {
+                showToast('請輸入項目名稱', true);
+                return;
+            }
+
+            const syncAllGrade5 = appData.currentSubject === 'grade5_science'
+                && document.getElementById('syncGrade5Checkbox').checked;
+            const targetClasses = pendingCategory === 'pe'
+                ? SUBJECT_CONFIG.grade2_pe.classes
+                : (syncAllGrade5 ? SUBJECT_CONFIG.grade5_science.classes : [getCurrentClass()]);
+
+            const sharedId = 'col_' + Date.now();
+            targetClasses.forEach((cls, idx) => {
+                const cData = appData.classes[cls];
+                if (!cData) return;
+                // 若該班已有同名且同類別項目則略過，避免重複建立
+                const exists = cData.columns.some(c => c.category === pendingCategory && c.name === name);
+                if (exists) return;
+
+                const newCol = {
+                    id: `${sharedId}_${idx}`,
+                    category: pendingCategory,
+                    name: name,
+                    checkOnly: pendingCheckOnly
+                };
+                if (pendingCategory === 'pe') {
+                    newCol.weight = name.includes('上課表現') ? 40 : 20;
+                }
+                cData.columns.push(newCol);
+            });
+
+            saveData();
+            closeItemModal();
+            renderAll();
+            showToast(pendingCategory === 'pe'
+                ? `已同步在二年級 (212、213班) 新增「${name}」！`
+                : (syncAllGrade5
+                    ? `已同步在五年級全部班級 (507～512) 新增「${name}」！`
+                    : `已新增${pendingCheckOnly ? '只檢查' : ''}項目「${name}」`));
+        }
+
+        // 刪除成績項目（五年級自然科同步從 507~512 班移除；二年級體育同步從 212~213 班移除）
+        function deleteColumn(colId) {
+            const clsData = appData.classes[getCurrentClass()];
+            const target = clsData.columns.find(c => c.id === colId);
+            if (!target) return;
+
+            const isPE = appData.currentSubject === 'grade2_pe';
+            const targetClasses = isPE ? SUBJECT_CONFIG.grade2_pe.classes : SUBJECT_CONFIG.grade5_science.classes;
+
+            targetClasses.forEach(cls => {
+                const cData = appData.classes[cls];
+                if (!cData) return;
+                const removedIds = cData.columns
+                    .filter(c => c.category === target.category && c.name === target.name)
+                    .map(c => c.id);
+                cData.columns = cData.columns.filter(c => !(c.category === target.category && c.name === target.name));
+                cData.students.forEach(stu => {
+                    removedIds.forEach(rid => {
+                        delete stu.scores[rid];
+                        if (stu.records) delete stu.records[rid];
+                        if (stu.statuses) delete stu.statuses[rid];
+                    });
+                });
+            });
+
+            saveData();
+            renderAll();
+            showToast(isPE
+                ? `已從二年級 (212、213班) 同步移除「${target.name}」`
+                : `已從五年級全部班級 (507～512) 移除「${target.name}」`);
+        }
+
+        // 計算單一學生的各項平均與總分（同時支援自然科與體育科）
+        function calculateStudentGrades(student, columns) {
+            const isPE = appData.currentSubject === 'grade2_pe';
+
+            if (isPE) {
+                let weightedSum = 0, usedWeight = 0;
+                columns.forEach(c => {
+                    const val = student.scores[c.id];
+                    const w = c.weight !== undefined ? parseFloat(c.weight) : (c.name.includes('上課表現') ? 40 : 20);
+                    if (val !== undefined && val !== '' && !isNaN(parseFloat(val)) && w > 0) {
+                        weightedSum += parseFloat(val) * w;
+                        usedWeight += w;
+                    }
+                });
+                const rawAvg = usedWeight > 0 ? (weightedSum / usedWeight) : null;
+                const bonus = parseInt(student.peBonus) || 0;
+                const baseTotal = rawAvg !== null ? Math.round(rawAvg) : (bonus > 0 ? bonus : null);
+                const finalTotal = baseTotal !== null ? Math.min(100, Math.max(0, baseTotal + (rawAvg !== null ? bonus : 0))) : '-';
+                return {
+                    rawAvg: rawAvg !== null ? rawAvg.toFixed(1) : '-',
+                    peBonus: bonus,
+                    regularTotal: finalTotal
+                };
+            }
+
+            // 五年級自然科計算邏輯
+            const calcCategoryAvg = (cat) => {
+                const cols = columns.filter(c => c.category === cat && !c.checkOnly);
+                let sum = 0, count = 0;
+                cols.forEach(c => {
+                    const val = student.scores[c.id];
+                    if (val !== undefined && val !== '' && !isNaN(parseFloat(val))) {
+                        sum += parseFloat(val);
+                        count++;
+                    }
+                });
+                return count > 0 ? (sum / count) : null;
+            };
+
+            const quizAvg = calcCategoryAvg('quiz');
+            const hwAvg = calcCategoryAvg('homework');
+            const abAvg = calcCategoryAvg('abtest');
+
+            let regularTotal = null;
+            if (quizAvg !== null || hwAvg !== null || abAvg !== null) {
+                const q = quizAvg !== null ? quizAvg : 0;
+                const h = hwAvg !== null ? hwAvg : 0;
+                const a = abAvg !== null ? abAvg : 0;
+                regularTotal = Math.round(q * 0.25 + h * 0.50 + a * 0.25);
+            }
+
+            let semesterTotal = null;
+            const examVal = (student.examScore !== undefined && student.examScore !== '' && !isNaN(parseFloat(student.examScore))) 
+                ? parseFloat(student.examScore) 
+                : null;
+
+            if (regularTotal !== null && examVal !== null) {
+                const regW = appData.regularWeight / 100;
+                const exmW = (100 - appData.regularWeight) / 100;
+                semesterTotal = Math.round(regularTotal * regW + examVal * exmW);
+            } else if (regularTotal !== null) {
+                semesterTotal = regularTotal;
+            }
+
+            return {
+                quizAvg: quizAvg !== null ? quizAvg.toFixed(1) : '-',
+                hwAvg: hwAvg !== null ? hwAvg.toFixed(1) : '-',
+                abAvg: abAvg !== null ? abAvg.toFixed(1) : '-',
+                regularTotal: regularTotal !== null ? regularTotal : '-',
+                semesterTotal: semesterTotal !== null ? semesterTotal : '-'
+            };
+        }
+
+        // 渲染表格表頭
+        function renderTableHead() {
+            const clsData = appData.classes[getCurrentClass()];
+            const thead = document.getElementById('tableHead');
+            const isPE = appData.currentSubject === 'grade2_pe';
+            
+            let html = `<tr>
+                <th class="sticky-header-1 bg-slate-100 py-3 px-3 text-center w-[60px] border-r border-slate-200">座號</th>
+                <th class="sticky-header-2 bg-slate-100 py-3 px-3 text-left min-w-[105px] border-r border-slate-300 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                    <div>姓名</div>
+                    <div class="text-[10px] font-normal text-slate-400">點擊可改字</div>
+                </th>
+            `;
+
+            if (isPE) {
+                clsData.columns.forEach(c => {
+                    const hasRubric = c.rubric && c.rubric.enabled;
+                    const w = c.weight !== undefined ? c.weight : (c.name.includes('上課表現') ? 40 : 20);
+                    html += `<th class="py-2.5 px-2 text-center bg-orange-50/80 text-orange-950 border-r border-slate-200 min-w-[95px]">
+                        <div class="text-[10px] text-orange-700 font-bold">佔 ${w}%${hasRubric ? ' · 自動算' : ''}</div>
+                        <div class="font-bold truncate max-w-[115px] mx-auto" title="${c.name}">${c.name}</div>
+                    </th>
+                    <th class="py-2.5 px-2 text-center bg-sky-50/80 text-sky-950 border-r border-slate-300 min-w-[125px]">
+                        <div class="flex items-center justify-center gap-1">
+                            <span class="text-[10px] text-sky-600 font-normal">項目狀況</span>
+                            <button type="button" onclick="openRubricModal('${c.id}')" title="設定自動給分標準" class="text-[10px] px-1.5 py-0.2 rounded ${hasRubric ? 'bg-orange-500 text-white font-bold' : 'bg-sky-200/70 text-sky-800 hover:bg-sky-300'}">
+                                <i class="fa-solid fa-gear"></i>
+                            </button>
+                        </div>
+                        <div class="font-bold truncate max-w-[125px] mx-auto" title="${c.name}">${c.name}</div>
+                    </th>`;
+                });
+                html += `
+                    <th class="py-2.5 px-3 text-center bg-amber-50 text-amber-900 border-r border-slate-300 min-w-[85px]">
+                        <div class="text-[10px] text-amber-700">加權小數</div>
+                        <div class="font-bold">加權均分</div>
+                    </th>
+                    <th class="py-2.5 px-2.5 text-center bg-emerald-50 text-emerald-900 border-r border-slate-300 min-w-[105px]">
+                        <div class="text-[10px] text-emerald-700">不定期表揚</div>
+                        <div class="font-bold">鼓勵加分</div>
+                    </th>
+                    <th class="py-2.5 px-3 text-center bg-orange-100 text-orange-950 border-r border-slate-300 min-w-[100px]">
+                        <div class="text-[10px] text-orange-700">含加分(上限100)</div>
+                        <div class="font-bold">平時總分</div>
+                    </th>
+                    <th class="py-2.5 px-3 text-left bg-violet-50 text-violet-950 min-w-[270px]">
+                        <div class="text-[10px] text-violet-700">學務系統 · 可點右側評語庫快選</div>
+                        <div class="font-bold">期末評語</div>
+                    </th>
+                </tr>`;
+                thead.innerHTML = html;
+                return;
+            }
+
+            // 五年級自然科表頭
+            const quizCols = clsData.columns.filter(c => c.category === 'quiz');
+            const hwCols = clsData.columns.filter(c => c.category === 'homework');
+            const abCols = clsData.columns.filter(c => c.category === 'abtest');
+
+            quizCols.forEach(c => {
+                html += `<th class="py-2.5 px-2 text-center bg-blue-50/80 text-blue-900 border-r border-slate-200 min-w-[80px]">
+                    <div class="text-[10px] text-blue-600 font-normal">考卷(25%)</div>
+                    <div class="font-bold truncate max-w-[85px] mx-auto" title="${c.name}">${c.name}</div>
+                </th>`;
+            });
+            html += `<th class="py-2.5 px-2 text-center bg-blue-100/80 text-blue-950 border-r border-slate-300 min-w-[70px]">
+                <div class="text-[10px] text-blue-700">25%小計</div>
+                <div class="font-bold">考卷均分</div>
+            </th>`;
+
+            hwCols.forEach(c => {
+                if (c.checkOnly) {
+                    html += `<th class="py-2.5 px-2 text-center bg-emerald-50/80 text-emerald-900 border-r border-slate-200 min-w-[85px]">
+                        <div class="text-[10px] text-emerald-600 font-normal">只檢查(不計分)</div>
+                        <div class="font-bold truncate max-w-[90px] mx-auto" title="${c.name}">${c.name}</div>
+                    </th>`;
+                } else {
+                    html += `<th class="py-2.5 px-2 text-center bg-amber-50/80 text-amber-900 border-r border-slate-200 min-w-[80px]">
+                        <div class="text-[10px] text-amber-600 font-normal">作業(50%)</div>
+                        <div class="font-bold truncate max-w-[85px] mx-auto" title="${c.name}">${c.name}</div>
+                    </th>`;
+                }
+            });
+            html += `<th class="py-2.5 px-2 text-center bg-amber-100/80 text-amber-950 border-r border-slate-300 min-w-[70px]">
+                <div class="text-[10px] text-amber-700">50%小計</div>
+                <div class="font-bold">作業均分</div>
+            </th>`;
+
+            abCols.forEach(c => {
+                html += `<th class="py-2.5 px-2 text-center bg-purple-50/80 text-purple-900 border-r border-slate-200 min-w-[80px]">
+                    <div class="text-[10px] text-purple-600 font-normal">A/B卷(25%)</div>
+                    <div class="font-bold truncate max-w-[85px] mx-auto" title="${c.name}">${c.name}</div>
+                </th>`;
+            });
+            html += `<th class="py-2.5 px-2 text-center bg-purple-100/80 text-purple-950 border-r border-slate-300 min-w-[70px]">
+                <div class="text-[10px] text-purple-700">25%小計</div>
+                <div class="font-bold">A/B均分</div>
+            </th>`;
+
+            html += `
+                <th class="py-2.5 px-2.5 text-center bg-indigo-100 text-indigo-950 border-r border-slate-300 min-w-[85px]">
+                    <div class="text-[10px] text-indigo-700">學務系統</div>
+                    <div class="font-bold">平時總分</div>
+                </th>
+                <th class="py-2.5 px-2.5 text-center bg-teal-50 text-teal-900 border-r border-slate-300 min-w-[85px]">
+                    <div class="text-[10px] text-teal-700">手動輸入</div>
+                    <div class="font-bold">段考成績</div>
+                </th>
+                <th class="py-2.5 px-2.5 text-center bg-slate-200 text-slate-900 border-r border-slate-300 min-w-[85px]">
+                    <div class="text-[10px] text-slate-600">加權預覽</div>
+                    <div class="font-bold">學期總分</div>
+                </th>
+                <th class="py-2.5 px-3 text-left bg-violet-50 text-violet-950 min-w-[270px]">
+                    <div class="text-[10px] text-violet-700">學務系統 · 可點右側評語庫快選</div>
+                    <div class="font-bold">期末評語</div>
+                </th>
+            </tr>`;
+
+            thead.innerHTML = html;
+        }
+
+        // 渲染表格內容
+        function renderTableBody() {
+            const clsData = appData.classes[getCurrentClass()];
+            const tbody = document.getElementById('tableBody');
+            const isPE = appData.currentSubject === 'grade2_pe';
+            let html = '';
+
+            if (isPE) {
+                clsData.students.forEach((stu, rowIdx) => {
+                    if (!stu.records) stu.records = {};
+                    const res = calculateStudentGrades(stu, clsData.columns);
+                    const rawColor = getScoreColorClasses(res.rawAvg, true);
+                    const regColor = getScoreColorClasses(res.regularTotal, true);
+                    const commentVal = (stu.comment || '').replace(/"/g, '&quot;');
+                    const safeName = (stu.name || '').replace(/"/g, '&quot;');
+
+                    html += `<tr class="hover:bg-slate-50/90 transition group">
+                        <td class="sticky-col-1 bg-white group-hover:bg-slate-50 py-2 px-3 text-center font-mono text-slate-500 border-r border-slate-200">${stu.seat}</td>
+                        <td class="sticky-col-2 bg-white group-hover:bg-slate-50 py-1.5 px-2 font-medium text-slate-800 border-r border-slate-300 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] whitespace-nowrap">
+                            <input type="text" value="${safeName}"
+                                onchange="updateStudentName(${rowIdx}, this.value)"
+                                onkeydown="if(event.key==='Enter') this.blur()"
+                                title="點擊可直接修改學生姓名"
+                                class="w-20 bg-transparent hover:bg-slate-100 focus:bg-white focus:ring-2 focus:ring-orange-400 rounded px-1.5 py-0.5 font-medium text-slate-800 outline-none transition">
+                        </td>
+                    `;
+
+                    clsData.columns.forEach(c => {
+                        const val = stu.scores[c.id] !== undefined ? stu.scores[c.id] : '';
+                        const inputColor = getScoreColorClasses(val, false);
+                        const statusDecor = getStatusDecorClasses(stu, c, val);
+                        const stTag = isStudentNeedsCorrection(stu, c, val) ? '【未訂正】' : ((stu.statuses && stu.statuses[c.id] === 'missing' || val === '') ? '【缺考】' : '');
+                        const recVal = (stu.records[c.id] || '').replace(/"/g, '&quot;');
+                        const hasRubric = c.rubric && c.rubric.enabled;
+                        const placeholderTxt = hasRubric ? '點選或輸入次數...' : (c.name.includes('跳繩') ? '例: 50下' : (c.name.includes('扯鈴') ? '例: 44下' : (c.name.includes('毽子') ? '例: 連續5次' : '備註狀況...')));
+                        html += `<td class="p-1.5 text-center border-r border-slate-100">
+                            <input type="number" step="0.5" min="0" max="100" value="${val}" 
+                                data-row="${rowIdx}" data-col="${c.id}"
+                                title="${stTag}按滑鼠右鍵可切換「未訂正 / 缺考」標記"
+                                oncontextmenu="toggleCellStatus(event, ${rowIdx}, '${c.id}')"
+                                oninput="applyInputScoreColor(this)"
+                                onchange="updateScore(${rowIdx}, '${c.id}', this.value)"
+                                onkeydown="handleKeyNav(event, ${rowIdx}, '${c.id}')"
+                                class="w-20 text-center py-1 rounded-md border border-transparent hover:border-slate-300 focus:ring-2 focus:ring-orange-400 outline-none transition ${inputColor} ${statusDecor}">
+                        </td>
+                        <td class="p-1.5 text-center bg-sky-50/20 border-r border-slate-300">
+                            <div class="relative inline-flex items-center">
+                                <input type="text" value="${recVal}" 
+                                    data-row="${rowIdx}" data-col="rec_${c.id}"
+                                    onfocus="openPeQuickPicker(this, ${rowIdx}, '${c.id}')"
+                                    onclick="openPeQuickPicker(this, ${rowIdx}, '${c.id}')"
+                                    oninput="handleRecordLiveInput(${rowIdx}, '${c.id}', this.value)"
+                                    onchange="updateRecord(${rowIdx}, '${c.id}', this.value)"
+                                    onkeydown="handleKeyNav(event, ${rowIdx}, 'rec_${c.id}')"
+                                    placeholder="${placeholderTxt}"
+                                    class="w-32 text-center text-xs py-1 px-2 rounded-md border ${hasRubric ? 'border-orange-300 bg-orange-50/40 font-medium' : 'border-sky-200/80 bg-white'} hover:border-sky-400 focus:ring-2 focus:ring-sky-400 outline-none text-slate-700 transition">
+                            </div>
+                        </td>`;
+                    });
+
+                    html += `
+                        <td id="peraw-${rowIdx}" class="py-2 px-3 text-center border-r border-slate-300 ${rawColor || 'bg-amber-50/40 text-amber-900 font-medium'}">${res.rawAvg}</td>
+                        <td class="p-1.5 text-center bg-emerald-50/30 border-r border-slate-300 whitespace-nowrap">
+                            <div class="inline-flex items-center gap-1">
+                                <button type="button" onclick="adjustPeBonus(${rowIdx}, -1)" title="扣回 1 分" class="w-6 h-6 rounded-md bg-slate-200/80 hover:bg-slate-300 text-slate-700 font-bold text-xs transition">-</button>
+                                <span id="pebonus-${rowIdx}" class="inline-block min-w-[2.2rem] text-center font-bold text-xs ${res.peBonus > 0 ? 'text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded' : 'text-slate-400'}">${res.peBonus > 0 ? '+' + res.peBonus : '0'}</span>
+                                <button type="button" onclick="adjustPeBonus(${rowIdx}, 1)" title="鼓勵加 1 分" class="w-7 h-6 rounded-md bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs shadow-xs transition">+1</button>
+                            </div>
+                        </td>
+                        <td id="regtot-${rowIdx}" class="py-2 px-3 text-center border-r border-slate-300 text-base ${regColor || 'bg-orange-50/70 text-orange-700 font-bold'}">${res.regularTotal}</td>
+                        <td class="p-1.5 bg-violet-50/20">
+                            <div class="flex items-center gap-1.5">
+                                <input type="text" id="comment-input-${rowIdx}" value="${commentVal}"
+                                    onchange="updateComment(${rowIdx}, this.value)"
+                                    placeholder="輸入或選取體育評語..."
+                                    class="flex-1 min-w-[180px] text-xs py-1.5 px-2.5 rounded-lg border border-violet-200 bg-white focus:border-violet-500 outline-none text-slate-700">
+                                <button onclick="openCommentModal(${rowIdx})" class="shrink-0 bg-violet-100 hover:bg-violet-200 text-violet-800 text-xs font-bold px-2.5 py-1.5 rounded-lg transition flex items-center gap-1" title="開啟二年級體育評語推薦庫">
+                                    <i class="fa-solid fa-wand-magic-sparkles"></i> 評語庫
+                                </button>
+                            </div>
+                        </td>
+                    </tr>`;
+                });
+
+                tbody.innerHTML = html;
+                renderTableFoot();
+                renderMissingTracker();
+                renderDinoTracker();
+                renderStatsTable();
+                return;
+            }
+
+            // 五年級自然科表格內容
+            const quizCols = clsData.columns.filter(c => c.category === 'quiz');
+            const hwCols = clsData.columns.filter(c => c.category === 'homework');
+            const abCols = clsData.columns.filter(c => c.category === 'abtest');
+
+            clsData.students.forEach((stu, rowIdx) => {
+                const res = calculateStudentGrades(stu, clsData.columns);
+                const qAvgColor = getScoreColorClasses(res.quizAvg, true);
+                const hAvgColor = getScoreColorClasses(res.hwAvg, true);
+                const abAvgColor = getScoreColorClasses(res.abAvg, true);
+                const regColor = getScoreColorClasses(res.regularTotal, true);
+                const semColor = getScoreColorClasses(res.semesterTotal, true);
+                const safeName = (stu.name || '').replace(/"/g, '&quot;');
+
+                html += `<tr class="hover:bg-slate-50/90 transition group">
+                    <td class="sticky-col-1 bg-white group-hover:bg-slate-50 py-2 px-3 text-center font-mono text-slate-500 border-r border-slate-200">${stu.seat}</td>
+                    <td class="sticky-col-2 bg-white group-hover:bg-slate-50 py-1.5 px-2 font-medium text-slate-800 border-r border-slate-300 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] whitespace-nowrap">
+                        <input type="text" value="${safeName}"
+                            onchange="updateStudentName(${rowIdx}, this.value)"
+                            onkeydown="if(event.key==='Enter') this.blur()"
+                            title="點擊可直接修改學生姓名"
+                            class="w-20 bg-transparent hover:bg-slate-100 focus:bg-white focus:ring-2 focus:ring-indigo-400 rounded px-1.5 py-0.5 font-medium text-slate-800 outline-none transition">
+                    </td>
+                `;
+
+                quizCols.forEach(c => {
+                    const val = stu.scores[c.id] !== undefined ? stu.scores[c.id] : '';
+                    const inputColor = getScoreColorClasses(val, false);
+                    const statusDecor = getStatusDecorClasses(stu, c, val);
+                    const stTag = isStudentNeedsCorrection(stu, c, val) ? '【未訂正】' : ((stu.statuses && stu.statuses[c.id] === 'missing' || val === '') ? '【缺考】' : '');
+                    html += `<td class="p-1.5 text-center border-r border-slate-100">
+                        <input type="number" step="0.5" min="0" max="100" value="${val}" 
+                            data-row="${rowIdx}" data-col="${c.id}"
+                            title="${stTag}按滑鼠右鍵可切換「未訂正 / 缺考」標記"
+                            oncontextmenu="toggleCellStatus(event, ${rowIdx}, '${c.id}')"
+                            oninput="applyInputScoreColor(this)"
+                            onchange="updateScore(${rowIdx}, '${c.id}', this.value)"
+                            onkeydown="handleKeyNav(event, ${rowIdx}, '${c.id}')"
+                            class="w-16 text-center py-1 rounded-md border border-transparent hover:border-slate-300 focus:ring-2 focus:ring-blue-400 outline-none transition ${inputColor} ${statusDecor}">
+                    </td>`;
+                });
+                html += `<td id="qavg-${rowIdx}" class="py-2 px-2 text-center border-r border-slate-300 ${qAvgColor || 'bg-blue-50/40 text-blue-900 font-medium'}">${res.quizAvg}</td>`;
+
+                hwCols.forEach(c => {
+                    if (c.checkOnly) {
+                        const st = (stu.statuses && stu.statuses[c.id]) || '';
+                        let btnHtml = '';
+                        if (st === 'done') {
+                            btnHtml = `<button type="button" onclick="toggleCheckOnlyStatus(event, ${rowIdx}, '${c.id}')" oncontextmenu="toggleCheckOnlyStatus(event, ${rowIdx}, '${c.id}')" title="點擊切換狀態：已過關 → 未訂正 → 未交" class="w-16 py-1 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold hover:brightness-95 transition">✔ 已交</button>`;
+                        } else if (st === 'correction') {
+                            btnHtml = `<button type="button" onclick="toggleCheckOnlyStatus(event, ${rowIdx}, '${c.id}')" oncontextmenu="toggleCheckOnlyStatus(event, ${rowIdx}, '${c.id}')" title="點擊切換狀態：未訂正 → 未交 → 已過關" class="w-16 py-1 rounded-md bg-amber-100 text-amber-800 border border-amber-400 text-xs font-bold hover:brightness-95 transition">未訂正</button>`;
+                        } else {
+                            btnHtml = `<button type="button" onclick="toggleCheckOnlyStatus(event, ${rowIdx}, '${c.id}')" oncontextmenu="toggleCheckOnlyStatus(event, ${rowIdx}, '${c.id}')" title="點擊切換狀態：未交 → 已過關 → 未訂正" class="w-16 py-1 rounded-md bg-rose-50 text-rose-600 border border-dashed border-rose-300 text-xs font-medium hover:bg-rose-100 transition">未交</button>`;
+                        }
+                        html += `<td class="p-1.5 text-center bg-emerald-50/15 border-r border-slate-100">${btnHtml}</td>`;
+                    } else {
+                        const val = stu.scores[c.id] !== undefined ? stu.scores[c.id] : '';
+                        const inputColor = getScoreColorClasses(val, false);
+                        const statusDecor = getStatusDecorClasses(stu, c, val);
+                        const trackType = getColumnTrackType(c);
+                        const stTag = isStudentNeedsCorrection(stu, c, val) ? '【未訂正】' : ((trackType !== 'ignore_blank' && (stu.statuses && stu.statuses[c.id] === 'missing' || val === '')) ? '【缺交】' : '');
+                        html += `<td class="p-1.5 text-center border-r border-slate-100">
+                            <input type="number" step="0.5" min="0" max="100" value="${val}" 
+                                data-row="${rowIdx}" data-col="${c.id}"
+                                title="${stTag}按滑鼠右鍵可切換「未訂正 / 缺交」標記"
+                                oncontextmenu="toggleCellStatus(event, ${rowIdx}, '${c.id}')"
+                                oninput="applyInputScoreColor(this)"
+                                onchange="updateScore(${rowIdx}, '${c.id}', this.value)"
+                                onkeydown="handleKeyNav(event, ${rowIdx}, '${c.id}')"
+                                class="w-16 text-center py-1 rounded-md border border-transparent hover:border-slate-300 focus:ring-2 focus:ring-amber-400 outline-none transition ${inputColor} ${statusDecor}">
+                        </td>`;
+                    }
+                });
+                html += `<td id="havg-${rowIdx}" class="py-2 px-2 text-center border-r border-slate-300 ${hAvgColor || 'bg-amber-50/40 text-amber-900 font-medium'}">${res.hwAvg}</td>`;
+
+                abCols.forEach(c => {
+                    const val = stu.scores[c.id] !== undefined ? stu.scores[c.id] : '';
+                    const inputColor = getScoreColorClasses(val, false);
+                    const statusDecor = getStatusDecorClasses(stu, c, val);
+                    const stTag = isStudentNeedsCorrection(stu, c, val) ? '【未訂正】' : ((stu.statuses && stu.statuses[c.id] === 'missing' || val === '') ? '【缺考】' : '');
+                    html += `<td class="p-1.5 text-center border-r border-slate-100">
+                        <input type="number" step="0.5" min="0" max="100" value="${val}" 
+                            data-row="${rowIdx}" data-col="${c.id}"
+                            title="${stTag}按滑鼠右鍵可切換「未訂正 / 缺考」標記"
+                            oncontextmenu="toggleCellStatus(event, ${rowIdx}, '${c.id}')"
+                            oninput="applyInputScoreColor(this)"
+                            onchange="updateScore(${rowIdx}, '${c.id}', this.value)"
+                            onkeydown="handleKeyNav(event, ${rowIdx}, '${c.id}')"
+                            class="w-16 text-center py-1 rounded-md border border-transparent hover:border-slate-300 focus:ring-2 focus:ring-purple-400 outline-none transition ${inputColor} ${statusDecor}">
+                    </td>`;
+                });
+                html += `<td id="abavg-${rowIdx}" class="py-2 px-2 text-center border-r border-slate-300 ${abAvgColor || 'bg-purple-50/40 text-purple-900 font-medium'}">${res.abAvg}</td>`;
+
+                const examVal = stu.examScore !== undefined ? stu.examScore : '';
+                const examColor = getScoreColorClasses(examVal, false);
+                const examStatusDecor = getStatusDecorClasses(stu, 'examScore', examVal);
+                const commentVal = (stu.comment || '').replace(/"/g, '&quot;');
+                html += `
+                    <td id="regtot-${rowIdx}" class="py-2 px-3 text-center border-r border-slate-300 text-base ${regColor || 'bg-indigo-50/60 text-indigo-700 font-bold'}">${res.regularTotal}</td>
+                    <td class="p-1.5 text-center bg-teal-50/30 border-r border-slate-300">
+                        <input type="number" step="0.5" min="0" max="100" value="${examVal}" 
+                            data-row="${rowIdx}" data-col="examScore"
+                            title="按滑鼠右鍵可切換「未訂正 / 缺考」標記"
+                            oncontextmenu="toggleCellStatus(event, ${rowIdx}, 'examScore')"
+                            oninput="applyInputScoreColor(this)"
+                            onchange="updateExamScore(${rowIdx}, this.value)"
+                            onkeydown="handleKeyNav(event, ${rowIdx}, 'examScore')"
+                            class="w-16 text-center py-1 rounded-md border outline-none font-medium transition ${examColor || 'border-teal-200 bg-white text-teal-900'} ${examStatusDecor}">
+                    </td>
+                    <td id="semtot-${rowIdx}" class="py-2 px-3 text-center border-r border-slate-300 text-base ${semColor || 'bg-slate-100/80 text-slate-900 font-bold'}">${res.semesterTotal}</td>
+                    <td class="p-1.5 bg-violet-50/20">
+                        <div class="flex items-center gap-1.5">
+                            <input type="text" id="comment-input-${rowIdx}" value="${commentVal}"
+                                onchange="updateComment(${rowIdx}, this.value)"
+                                placeholder="輸入或選取評語..."
+                                class="flex-1 min-w-[180px] text-xs py-1.5 px-2.5 rounded-lg border border-violet-200 bg-white focus:border-violet-500 outline-none text-slate-700">
+                            <button onclick="openCommentModal(${rowIdx})" class="shrink-0 bg-violet-100 hover:bg-violet-200 text-violet-800 text-xs font-bold px-2.5 py-1.5 rounded-lg transition flex items-center gap-1" title="開啟自然科評語推薦庫">
+                                <i class="fa-solid fa-wand-magic-sparkles"></i> 評語庫
+                            </button>
+                        </div>
+                    </td>
+                </tr>`;
+            });
+
+            tbody.innerHTML = html;
+            renderTableFoot();
+            renderMissingTracker();
+            renderDinoTracker();
+            renderStatsTable();
+        }
+
+        // 切換「作業交齊全班 +5 分」已加分標記
+        function toggleDinoClassAwarded(colId) {
+            const clsData = appData.classes[getCurrentClass()];
+            if (!clsData.dinoClassAwarded) clsData.dinoClassAwarded = {};
+            clsData.dinoClassAwarded[colId] = !clsData.dinoClassAwarded[colId];
+            saveData();
+            renderDinoTracker();
+            const col = clsData.columns.find(c => c.id === colId);
+            showToast(clsData.dinoClassAwarded[colId]
+                ? `🦖 已標記「${col ? col.name : ''}」全班 +5 分完成！`
+                : `已取消「${col ? col.name : ''}」的 +5 分標記`);
+        }
+
+        // 切換「個人 100 分 +1 分」單項已加分標記（key 格式：`${stuId}_${colId}`）
+        function toggleDinoPersonalItem(awardKey, stuName, colName) {
+            const clsData = appData.classes[getCurrentClass()];
+            if (!clsData.dinoPersonalAwarded) clsData.dinoPersonalAwarded = {};
+            clsData.dinoPersonalAwarded[awardKey] = !clsData.dinoPersonalAwarded[awardKey];
+            saveData();
+            renderDinoTracker();
+            showToast(clsData.dinoPersonalAwarded[awardKey]
+                ? `🦖 已記錄「${stuName}」(${colName} 100分) +1 分！`
+                : `已取消「${stuName}」(${colName}) 的加分標記`);
+        }
+
+        // 一鍵將該生所有 100 分項目標記為「已到小恐龍加分」
+        function markAllStudentDinoDone(stuId, colIds, stuName) {
+            const clsData = appData.classes[getCurrentClass()];
+            if (!clsData.dinoPersonalAwarded) clsData.dinoPersonalAwarded = {};
+            const allDone = colIds.every(cid => clsData.dinoPersonalAwarded[`${stuId}_${cid}`]);
+            colIds.forEach(cid => {
+                clsData.dinoPersonalAwarded[`${stuId}_${cid}`] = !allDone;
+            });
+            saveData();
+            renderDinoTracker();
+            showToast(!allDone ? `🦖 已將「${stuName}」全部滿分項目勾選為已加分！` : `已重置「${stuName}」的加分勾選狀態`);
+        }
+
+        // 渲染「🦖 小恐龍班級 & 個人加分自動追蹤面板」
+        function renderDinoTracker() {
+            if (appData.currentSubject === 'grade2_pe') return;
+            const cls = getCurrentClass();
+            const clsData = appData.classes[cls];
+            const isPE = false;
+            if (!clsData.dinoClassAwarded) clsData.dinoClassAwarded = {};
+            if (!clsData.dinoPersonalAwarded) clsData.dinoPersonalAwarded = {};
+
+            document.getElementById('dinoTitle').textContent = `${cls} 班 — 小恐龍加分自動追蹤面板`;
+
+            // 1. 班級加分：作業交齊全班 +5 分（偵測所有作業類欄位，排除考卷與「上課表現」）
+            const classBonusBox = document.getElementById('dinoClassBonusList');
+            const hwColumns = clsData.columns.filter(c => getColumnTrackType(c) === 'homework');
+
+            if (hwColumns.length === 0) {
+                classBonusBox.innerHTML = `<div class="text-xs text-slate-500 py-2">目前科目無「作業類」項目（考試類不計入作業交齊 +5 分）。</div>`;
+            } else {
+                let hwHtml = '';
+                hwColumns.forEach(col => {
+                    let missingCount = 0;
+                    clsData.students.forEach(stu => {
+                        const st = stu.statuses && stu.statuses[col.id];
+                        const val = stu.scores[col.id];
+                        if (col.checkOnly) {
+                            if (st !== 'done') missingCount++;
+                        } else {
+                            if (st === 'missing' || val === undefined || val === null || val === '') missingCount++;
+                        }
+                    });
+
+                    const isComplete = clsData.students.length > 0 && missingCount === 0;
+                    const isAwarded = !!clsData.dinoClassAwarded[col.id];
+
+                    if (isComplete) {
+                        hwHtml += `<div class="flex items-center justify-between gap-2 bg-white p-2.5 rounded-lg border ${isAwarded ? 'border-slate-200 opacity-75' : 'border-emerald-300 shadow-xs'}">
+                            <div class="flex items-center gap-2 min-w-0">
+                                <span class="px-2 py-0.5 rounded-md text-xs font-bold ${isAwarded ? 'bg-slate-200 text-slate-600' : 'bg-emerald-600 text-white animate-pulse'}">交齊 +5分</span>
+                                <span class="font-bold text-sm text-slate-800 truncate">${col.name}</span>
+                            </div>
+                            <button type="button" onclick="toggleDinoClassAwarded('${col.id}')"
+                                class="shrink-0 px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${isAwarded
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                    : 'bg-amber-500 hover:bg-amber-600 text-white shadow-sm'}">
+                                <i class="fa-solid ${isAwarded ? 'fa-square-check' : 'fa-square'}"></i>
+                                ${isAwarded ? '已到小恐龍 +5 分' : '待加分（點我打勾）'}
+                            </button>
+                        </div>`;
+                    } else {
+                        hwHtml += `<div class="flex items-center justify-between gap-2 bg-white/70 p-2 rounded-lg border border-slate-200/80 text-xs text-slate-500">
+                            <span class="font-medium text-slate-700">${col.name}</span>
+                            <span>尚差 <strong class="text-rose-600">${missingCount}</strong> 人未交齊（交齊後自動亮起 +5 分）</span>
+                        </div>`;
+                    }
+                });
+                classBonusBox.innerHTML = hwHtml;
+            }
+
+            // 2. 個人加分：作業或考試 100 分（每項 +1 分）
+            const personalBox = document.getElementById('dinoPersonalBonusList');
+            const scoreCols = clsData.columns.filter(c => !c.checkOnly);
+            if (!isPE) {
+                scoreCols.push({ id: 'examScore', name: '段考' });
+            }
+
+            const studentHundredList = [];
+            clsData.students.forEach(stu => {
+                const hundredItems = [];
+                scoreCols.forEach(col => {
+                    const raw = col.id === 'examScore' ? stu.examScore : stu.scores[col.id];
+                    if (raw !== undefined && raw !== '' && !isNaN(parseFloat(raw)) && parseFloat(raw) === 100) {
+                        const key = `${stu.id}_${col.id}`;
+                        hundredItems.push({
+                            colId: col.id,
+                            colName: col.name,
+                            key: key,
+                            awarded: !!clsData.dinoPersonalAwarded[key]
+                        });
+                    }
+                });
+                if (hundredItems.length > 0) {
+                    studentHundredList.push({ stu, hundredItems });
+                }
+            });
+
+            const totalPendingPoints = studentHundredList.reduce(
+                (acc, entry) => acc + entry.hundredItems.filter(i => !i.awarded).length, 0
+            );
+            document.getElementById('dinoHundredCountBadge').textContent =
+                `共 ${studentHundredList.length} 人滿分（尚有 ${totalPendingPoints} 分待加）`;
+
+            if (studentHundredList.length === 0) {
+                personalBox.innerHTML = `<div class="text-xs text-slate-500 py-4 text-center">本班目前尚無 100 分紀錄，輸入 100 分後會自動出現在這裡！</div>`;
+            } else {
+                let pHtml = '';
+                studentHundredList.forEach(({ stu, hundredItems }) => {
+                    const allDone = hundredItems.every(i => i.awarded);
+                    const pendingCount = hundredItems.filter(i => !i.awarded).length;
+                    const colIdsJson = JSON.stringify(hundredItems.map(i => i.colId)).replace(/"/g, '&quot;');
+
+                    const chipsHtml = hundredItems.map(item => `
+                        <button type="button" onclick="toggleDinoPersonalItem('${item.key}', '${stu.name}', '${item.colName}')"
+                            title="點擊切換該項 100 分是否已在小恐龍網頁加分"
+                            class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold border transition ${item.awarded
+                                ? 'bg-slate-100 text-slate-400 border-slate-200 line-through'
+                                : 'bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200'}">
+                            <i class="fa-solid ${item.awarded ? 'fa-check text-emerald-600' : 'fa-plus text-amber-600'}"></i>
+                            ${item.colName} (+1)
+                        </button>
+                    `).join('');
+
+                    pHtml += `<div class="flex flex-wrap items-center justify-between gap-2 bg-white p-2 rounded-lg border ${allDone ? 'border-slate-200 opacity-70' : 'border-amber-300'}">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="font-bold text-xs text-slate-800 whitespace-nowrap">${stu.seat}號 ${stu.name}</span>
+                            <div class="flex flex-wrap gap-1">${chipsHtml}</div>
+                        </div>
+                        <button type="button" onclick="markAllStudentDinoDone('${stu.id}', ${colIdsJson}, '${stu.name}')"
+                            class="shrink-0 px-2.5 py-1 rounded-md text-[11px] font-bold transition ${allDone
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-amber-500 hover:bg-amber-600 text-white'}">
+                            ${allDone ? '✔ 全部已加' : `待加 +${pendingCount}分`}
+                        </button>
+                    </div>`;
+                });
+                personalBox.innerHTML = pHtml;
+            }
+        }
+
+        // 一鍵複製本班小恐龍加分清單
+        function copyDinoSummaryToClipboard() {
+            const cls = getCurrentClass();
+            const clsData = appData.classes[cls];
+            const isPE = appData.currentSubject === 'grade2_pe';
+            if (!clsData.dinoClassAwarded) clsData.dinoClassAwarded = {};
+            if (!clsData.dinoPersonalAwarded) clsData.dinoPersonalAwarded = {};
+
+            let lines = [`🦖 【${cls} 班小恐龍加分清單】`];
+
+            // 班級加分
+            const hwColumns = clsData.columns.filter(c => getColumnTrackType(c) === 'homework');
+            const classBonuses = [];
+            hwColumns.forEach(col => {
+                let missingCount = 0;
+                clsData.students.forEach(stu => {
+                    const st = stu.statuses && stu.statuses[col.id];
+                    const val = stu.scores[col.id];
+                    if (col.checkOnly) {
+                        if (st !== 'done') missingCount++;
+                    } else if (st === 'missing' || val === undefined || val === null || val === '') {
+                        missingCount++;
+                    }
+                });
+                if (clsData.students.length > 0 && missingCount === 0) {
+                    const statusTxt = clsData.dinoClassAwarded[col.id] ? '✔已加' : '⏳待加';
+                    classBonuses.push(`${col.name}（全班 +5 分）[${statusTxt}]`);
+                }
+            });
+            lines.push(`1. 班級作業交齊加分：${classBonuses.length > 0 ? classBonuses.join('、') : '尚無'}`);
+
+            // 個人 100 分加分
+            const scoreCols = clsData.columns.filter(c => !c.checkOnly);
+            if (!isPE) scoreCols.push({ id: 'examScore', name: '段考' });
+
+            const personalLines = [];
+            clsData.students.forEach(stu => {
+                const items = [];
+                scoreCols.forEach(col => {
+                    const raw = col.id === 'examScore' ? stu.examScore : stu.scores[col.id];
+                    if (raw !== undefined && raw !== '' && !isNaN(parseFloat(raw)) && parseFloat(raw) === 100) {
+                        const awarded = !!clsData.dinoPersonalAwarded[`${stu.id}_${col.id}`];
+                        items.push(`${col.name}${awarded ? '(✔已加)' : '(⏳待加)'}`);
+                    }
+                });
+                if (items.length > 0) {
+                    personalLines.push(`  - ${stu.seat}號 ${stu.name}：+${items.length} 分【${items.join('、')}】`);
+                }
+            });
+            lines.push(`2. 個人 100 分加分（每項 +1 分）：\n${personalLines.length > 0 ? personalLines.join('\n') : '  - 尚無'}`);
+
+            copyTextHelper(lines.join('\n'), `已複製 ${cls} 班小恐龍加分清單！`);
+        }
+
+        // 渲染「作業／測驗缺交與未完成訂正追蹤看板」
+        function renderMissingTracker() {
+            const cls = getCurrentClass();
+            const clsData = appData.classes[cls];
+            const isPE = appData.currentSubject === 'grade2_pe';
+            document.getElementById('trackerTitle').textContent = `${cls} 班 — ${isPE ? '體育測驗「缺考 / 未訂正」' : '作業「缺交 / 未訂正」與考卷「缺考」'}追蹤看板`;
+
+            const grid = document.getElementById('trackerGrid');
+            const itemsToCheck = [...clsData.columns];
+            if (!isPE) {
+                itemsToCheck.push({ id: 'examScore', category: 'exam', name: '段考考卷' });
+            }
+
+            let html = '';
+            itemsToCheck.forEach(col => {
+                const trackType = getColumnTrackType(col);
+                // 排除「上課表現」自動列入缺交（除非老師手動按右鍵標記過）
+                if (trackType === 'ignore_blank') {
+                    const hasManual = clsData.students.some(s => s.statuses && (s.statuses[col.id] === 'correction' || s.statuses[col.id] === 'missing'));
+                    if (!hasManual) return;
+                }
+
+                const missingWord = trackType === 'exam' ? '缺考' : '缺交';
+                const missingList = [];
+                const correctionList = [];
+
+                clsData.students.forEach(stu => {
+                    const val = col.id === 'examScore' ? stu.examScore : stu.scores[col.id];
+                    const st = stu.statuses && stu.statuses[col.id];
+                    const tag = `${stu.seat}號 ${stu.name}`;
+
+                    if (col.checkOnly) {
+                        if (st === 'correction') correctionList.push(tag);
+                        else if (st !== 'done') missingList.push(tag);
+                    } else if (trackType === 'ignore_blank') {
+                        if (isStudentNeedsCorrection(stu, col, val)) correctionList.push(tag);
+                        else if (st === 'missing') missingList.push(tag);
+                    } else {
+                        if (isStudentNeedsCorrection(stu, col, val)) {
+                            correctionList.push(tag);
+                        } else if (st === 'missing' || val === undefined || val === null || val === '') {
+                            missingList.push(tag);
+                        }
+                    }
+                });
+
+                const allDone = missingList.length === 0 && correctionList.length === 0;
+                html += `<div class="rounded-xl border ${allDone ? 'border-emerald-200 bg-emerald-50/40' : 'border-slate-200 bg-slate-50/60'} p-3.5 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="font-bold text-slate-800 text-sm">${col.name}${col.checkOnly ? ' <span class="text-[11px] font-normal text-emerald-700">(只檢查)</span>' : ''}</span>
+                        ${allDone 
+                            ? `<span class="text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full"><i class="fa-solid fa-check mr-1"></i>全班已${trackType === 'exam' ? '考' : '交'}且訂正完畢</span>`
+                            : `<span class="text-xs font-medium text-slate-500">${missingWord} ${missingList.length} / 未訂正 ${correctionList.length}</span>`
+                        }
+                    </div>
+                    ${!allDone ? `
+                        <div class="space-y-2 text-xs">
+                            <div class="space-y-1">
+                                <div class="font-bold text-rose-700 flex items-center gap-1">
+                                    <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+                                    <span>${missingWord}（${missingList.length} 人）</span>
+                                </div>
+                                ${missingList.length > 0
+                                    ? `<div class="flex flex-wrap gap-1.5 pt-0.5">${missingList.map(nameTag => `<span class="inline-flex items-center px-2 py-0.5 rounded-md bg-rose-50 text-rose-800 border border-rose-200 font-medium shadow-2xs">${nameTag}</span>`).join('')}</div>`
+                                    : `<div class="text-slate-400 pl-3">無</div>`
+                                }
+                            </div>
+                            <div class="space-y-1 pt-1 border-t border-slate-200/70">
+                                <div class="font-bold text-amber-800 flex items-center gap-1">
+                                    <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+                                    <span>未訂正（${correctionList.length} 人）</span>
+                                </div>
+                                ${correctionList.length > 0
+                                    ? `<div class="flex flex-wrap gap-1.5 pt-0.5">${correctionList.map(nameTag => `<span class="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-50 text-amber-900 border border-amber-300 font-medium shadow-2xs">${nameTag}</span>`).join('')}</div>`
+                                    : `<div class="text-slate-400 pl-3">無</div>`
+                                }
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>`;
+            });
+
+            grid.innerHTML = html;
+        }
+
+        // 一鍵複製缺交／缺考／未訂正名單（方便貼到 LINE 給導師或公告）
+        function copyMissingTrackerToClipboard() {
+            const cls = getCurrentClass();
+            const clsData = appData.classes[cls];
+            const isPE = appData.currentSubject === 'grade2_pe';
+            const subjName = isPE ? '體育科' : '自然科';
+
+            const itemsToCheck = [...clsData.columns];
+            if (!isPE) itemsToCheck.push({ id: 'examScore', category: 'exam', name: '段考考卷' });
+
+            let lines = [`老師您好，以下為 ${cls} 班${subjName}目前尚未繳交、缺考及未完成訂正名單，再麻煩您協助提醒，謝謝！`];
+            let hasAny = false;
+
+            itemsToCheck.forEach(col => {
+                const trackType = getColumnTrackType(col);
+                if (trackType === 'ignore_blank') {
+                    const hasManual = clsData.students.some(s => s.statuses && (s.statuses[col.id] === 'correction' || s.statuses[col.id] === 'missing'));
+                    if (!hasManual) return;
+                }
+
+                const missingWord = trackType === 'exam' ? '缺考' : '缺交';
+                const missingList = [];
+                const correctionList = [];
+                clsData.students.forEach(stu => {
+                    const val = col.id === 'examScore' ? stu.examScore : stu.scores[col.id];
+                    const st = stu.statuses && stu.statuses[col.id];
+                    const tag = `${stu.seat}號${stu.name}`;
+                    if (col.checkOnly) {
+                        if (st === 'correction') correctionList.push(tag);
+                        else if (st !== 'done') missingList.push(tag);
+                    } else if (trackType === 'ignore_blank') {
+                        if (isStudentNeedsCorrection(stu, col, val)) correctionList.push(tag);
+                        else if (st === 'missing') missingList.push(tag);
+                    } else {
+                        if (isStudentNeedsCorrection(stu, col, val)) {
+                            correctionList.push(tag);
+                        } else if (st === 'missing' || val === undefined || val === null || val === '') {
+                            missingList.push(tag);
+                        }
+                    }
+                });
+
+                if (missingList.length > 0 || correctionList.length > 0) {
+                    hasAny = true;
+                    lines.push(`\n【${col.name}】`);
+                    if (missingList.length > 0) lines.push(`・${missingWord}（${missingList.length}人）：${missingList.join('、')}`);
+                    if (correctionList.length > 0) lines.push(`・未完成訂正（${correctionList.length}人）：${correctionList.join('、')}`);
+                }
+            });
+
+            if (!hasAny) {
+                showToast(`${cls} 班目前所有項目皆已繳交、應考並訂正完畢！`);
+                return;
+            }
+
+            copyTextHelper(lines.join('\n'), `已複製 ${cls} 班缺交／缺考與未訂正名單，可直接貼到 LINE 傳給導師！`);
+        }
+
+        // 即時更新輸入框的級距顏色
+        function applyInputScoreColor(inputEl) {
+            const baseClasses = inputEl.dataset.col === 'examScore'
+                ? 'w-16 text-center py-1 rounded-md border outline-none font-medium transition '
+                : (appData.currentSubject === 'grade2_pe'
+                    ? 'w-20 text-center py-1 rounded-md border border-transparent hover:border-slate-300 focus:ring-2 focus:ring-orange-400 outline-none transition '
+                    : 'w-16 text-center py-1 rounded-md border border-transparent hover:border-slate-300 focus:ring-2 focus:ring-indigo-400 outline-none transition ');
+            const colorCls = getScoreColorClasses(inputEl.value, false);
+            const fallback = inputEl.dataset.col === 'examScore' ? 'border-teal-200 bg-white text-teal-900' : '';
+            inputEl.className = baseClasses + (colorCls || fallback);
+        }
+
+        // 渲染主表格底部的「全班平均」列
+        function renderTableFoot() {
+            const clsData = appData.classes[getCurrentClass()];
+            const tfoot = document.getElementById('tableFoot');
+            const isPE = appData.currentSubject === 'grade2_pe';
+
+            const getColAvg = (getter) => {
+                let sum = 0, count = 0;
+                clsData.students.forEach(stu => {
+                    const val = getter(stu);
+                    if (val !== null && val !== undefined && val !== '' && val !== '-' && !isNaN(parseFloat(val))) {
+                        sum += parseFloat(val);
+                        count++;
+                    }
+                });
+                return count > 0 ? (sum / count).toFixed(1) : '-';
+            };
+
+            let html = `<tr>
+                <td class="sticky-col-1 bg-slate-100 py-2.5 px-3 text-center text-xs text-slate-500 border-r border-slate-200">統計</td>
+                <td class="sticky-col-2 bg-slate-100 py-2.5 px-3 text-left text-indigo-800 border-r border-slate-300 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">全班平均</td>
+            `;
+
+            if (isPE) {
+                clsData.columns.forEach(c => {
+                    const filledCount = clsData.students.filter(s => s.records && s.records[c.id] && s.records[c.id].trim() !== '').length;
+                    html += `<td class="py-2.5 px-2 text-center text-orange-800 border-r border-slate-200">${getColAvg(s => s.scores[c.id])}</td>
+                    <td class="py-2.5 px-2 text-center text-xs font-normal text-sky-800 bg-sky-50/40 border-r border-slate-300">已填 ${filledCount} 人</td>`;
+                });
+                html += `
+                    <td class="py-2.5 px-3 text-center bg-amber-100/60 text-amber-950 border-r border-slate-300">${getColAvg(s => calculateStudentGrades(s, clsData.columns).rawAvg)}</td>
+                    <td class="py-2.5 px-2.5 text-center bg-emerald-100/60 text-emerald-900 text-xs border-r border-slate-300">累計 +${clsData.students.reduce((acc, s) => acc + (parseInt(s.peBonus) || 0), 0)} 分</td>
+                    <td class="py-2.5 px-3 text-center bg-orange-100/80 text-orange-950 border-r border-slate-300">${getColAvg(s => calculateStudentGrades(s, clsData.columns).regularTotal)}</td>
+                    <td class="py-2.5 px-3 text-left text-xs font-normal text-violet-800 bg-violet-50/50">已填評語：${clsData.students.filter(s => s.comment && s.comment.trim()).length} / ${clsData.students.length} 人</td>
+                </tr>`;
+                tfoot.innerHTML = html;
+                return;
+            }
+
+            const quizCols = clsData.columns.filter(c => c.category === 'quiz');
+            const hwCols = clsData.columns.filter(c => c.category === 'homework');
+            const abCols = clsData.columns.filter(c => c.category === 'abtest');
+
+            quizCols.forEach(c => {
+                html += `<td class="py-2.5 px-2 text-center text-blue-800 border-r border-slate-200">${getColAvg(s => s.scores[c.id])}</td>`;
+            });
+            html += `<td class="py-2.5 px-2 text-center bg-blue-100/60 text-blue-950 border-r border-slate-300">${getColAvg(s => calculateStudentGrades(s, clsData.columns).quizAvg)}</td>`;
+
+            hwCols.forEach(c => {
+                if (c.checkOnly) {
+                    const doneCount = clsData.students.filter(s => s.statuses && s.statuses[c.id] === 'done').length;
+                    html += `<td class="py-2.5 px-2 text-center text-xs font-normal text-emerald-800 bg-emerald-50/40 border-r border-slate-200">已過關 ${doneCount}/${clsData.students.length}</td>`;
+                } else {
+                    html += `<td class="py-2.5 px-2 text-center text-amber-800 border-r border-slate-200">${getColAvg(s => s.scores[c.id])}</td>`;
+                }
+            });
+            html += `<td class="py-2.5 px-2 text-center bg-amber-100/60 text-amber-950 border-r border-slate-300">${getColAvg(s => calculateStudentGrades(s, clsData.columns).hwAvg)}</td>`;
+
+            abCols.forEach(c => {
+                html += `<td class="py-2.5 px-2 text-center text-purple-800 border-r border-slate-200">${getColAvg(s => s.scores[c.id])}</td>`;
+            });
+            html += `<td class="py-2.5 px-2 text-center bg-purple-100/60 text-purple-950 border-r border-slate-300">${getColAvg(s => calculateStudentGrades(s, clsData.columns).abAvg)}</td>`;
+
+            html += `
+                <td class="py-2.5 px-3 text-center bg-indigo-100/80 text-indigo-950 border-r border-slate-300">${getColAvg(s => calculateStudentGrades(s, clsData.columns).regularTotal)}</td>
+                <td class="py-2.5 px-3 text-center bg-teal-100/60 text-teal-950 border-r border-slate-300">${getColAvg(s => s.examScore)}</td>
+                <td class="py-2.5 px-3 text-center bg-slate-200/80 text-slate-900 border-r border-slate-300">${getColAvg(s => calculateStudentGrades(s, clsData.columns).semesterTotal)}</td>
+                <td class="py-2.5 px-3 text-left text-xs font-normal text-violet-800 bg-violet-50/50">已填評語：${clsData.students.filter(s => s.comment && s.comment.trim()).length} / ${clsData.students.length} 人</td>
+            </tr>`;
+
+            tfoot.innerHTML = html;
+        }
+
+        // 渲染下方「班級平均與分數級距統計表」
+        function renderStatsTable() {
+            const cls = getCurrentClass();
+            const clsData = appData.classes[cls];
+            const isPE = appData.currentSubject === 'grade2_pe';
+            
+            document.getElementById('statsTitle').textContent = `${cls} 班 — ${isPE ? '體育評量' : '考卷'}平均與分數級距統計表`;
+            document.getElementById('statsSubtitle').textContent = isPE 
+                ? '自動統計各項體育測驗與平時成績之班平均與人數分布'
+                : '自動統計「自出考卷」、「學校 A/B 卷」與「段考成績」之班平均與人數分布';
+            
+            const statsBody = document.getElementById('statsBody');
+            const examItems = [];
+
+            if (isPE) {
+                clsData.columns.forEach(c => {
+                    examItems.push({ label: `[體育評量] ${c.name}`, badgeClass: 'bg-orange-100 text-orange-800', getter: s => s.scores[c.id] });
+                });
+            } else {
+                clsData.columns.filter(c => c.category === 'quiz').forEach(c => {
+                    examItems.push({ label: `[自出考卷] ${c.name}`, badgeClass: 'bg-blue-100 text-blue-800', getter: s => s.scores[c.id] });
+                });
+                clsData.columns.filter(c => c.category === 'abtest').forEach(c => {
+                    examItems.push({ label: `[學校AB卷] ${c.name}`, badgeClass: 'bg-purple-100 text-purple-800', getter: s => s.scores[c.id] });
+                });
+                examItems.push({ label: `[定期評量] 段考成績`, badgeClass: 'bg-teal-100 text-teal-800', getter: s => s.examScore });
+            }
+
+            let html = '';
+            examItems.forEach(item => {
+                let count = 0, sum = 0;
+                let c100 = 0, c90 = 0, c80 = 0, c70 = 0, c60 = 0, cBelow60 = 0;
+
+                clsData.students.forEach(stu => {
+                    const raw = item.getter(stu);
+                    if (raw !== undefined && raw !== '' && !isNaN(parseFloat(raw))) {
+                        const s = parseFloat(raw);
+                        count++;
+                        sum += s;
+                        if (s >= 100) c100++;
+                        else if (s >= 90) c90++;
+                        else if (s >= 80) c80++;
+                        else if (s >= 70) c70++;
+                        else if (s >= 60) c60++;
+                        else cBelow60++;
+                    }
+                });
+
+                const avg = count > 0 ? (sum / count).toFixed(1) : '-';
+                html += `<tr class="hover:bg-slate-50 transition">
+                    <td class="py-2.5 px-3 text-left font-medium text-slate-800">
+                        <span class="inline-block px-2 py-0.5 rounded text-xs font-bold mr-1.5 ${item.badgeClass}">${item.label}</span>
+                    </td>
+                    <td class="py-2.5 px-2 text-slate-600 font-mono">${count} 人</td>
+                    <td class="py-2.5 px-2 font-bold text-indigo-700 bg-indigo-50/30">${avg}</td>
+                    <td class="py-2.5 px-2 font-bold text-amber-800 bg-amber-50/30">${c100}</td>
+                    <td class="py-2.5 px-2 font-bold text-sky-800 bg-sky-50/30">${c90}</td>
+                    <td class="py-2.5 px-2 font-bold text-emerald-800 bg-emerald-50/30">${c80}</td>
+                    <td class="py-2.5 px-2 font-bold text-indigo-800 bg-indigo-50/30">${c70}</td>
+                    <td class="py-2.5 px-2 font-bold text-orange-800 bg-orange-50/30">${c60}</td>
+                    <td class="py-2.5 px-2 font-bold ${cBelow60 > 0 ? 'text-rose-700 bg-rose-100/70' : 'text-slate-400 bg-rose-50/20'}">${cBelow60}</td>
+                </tr>`;
+            });
+
+            statsBody.innerHTML = html || `<tr><td colspan="9" class="py-4 text-slate-400 text-xs">尚無測驗項目</td></tr>`;
+        }
+
+        // 一鍵複製級距統計表
+        function copyStatsToClipboard() {
+            const cls = getCurrentClass();
+            const rows = Array.from(document.querySelectorAll('#statsTable tr'));
+            const lines = [`【${cls} 班成績平均與分數級距統計表】`];
+            rows.forEach(tr => {
+                const cells = Array.from(tr.querySelectorAll('th, td')).map(td => td.innerText.replace(/\s+/g, ' ').trim());
+                lines.push(cells.join('\t'));
+            });
+            copyTextHelper(lines.join('\n'), `已複製 ${cls} 班級距統計表，可直接貼至 Excel 或 Word！`);
+        }
+
+        // 原地直接修改學生姓名
+        function updateStudentName(rowIdx, newName) {
+            const trimmed = newName.trim();
+            if (!trimmed) {
+                renderTableBody();
+                showToast('學生姓名不能為空白！', true);
+                return;
+            }
+            const clsData = appData.classes[getCurrentClass()];
+            const stu = clsData.students[rowIdx];
+            if (stu.name !== trimmed) {
+                stu.name = trimmed;
+                saveData();
+                renderMissingTracker();
+                renderDinoTracker();
+                showToast(`已將 ${stu.seat} 號姓名修改為「${trimmed}」`);
+            }
+        }
+
+        // 更新平時成績分數
+        function updateScore(rowIdx, colId, value) {
+            const clsData = appData.classes[getCurrentClass()];
+            const stu = clsData.students[rowIdx];
+            if (value === '' || value === null) {
+                delete stu.scores[colId];
+            } else {
+                let num = parseFloat(value);
+                if (isNaN(num)) num = 0;
+                if (num > 100) num = 100;
+                if (num < 0) num = 0;
+                stu.scores[colId] = num;
+                if (stu.statuses && stu.statuses[colId] === 'missing') {
+                    delete stu.statuses[colId];
+                }
+            }
+            saveData();
+            const inputEl = document.querySelector(`input[data-row="${rowIdx}"][data-col="${colId}"]`);
+            if (inputEl) applyInputScoreColor(inputEl);
+            refreshRowCalculations(rowIdx);
+        }
+
+        // 更新段考分數
+        function updateExamScore(rowIdx, value) {
+            const clsData = appData.classes[getCurrentClass()];
+            const stu = clsData.students[rowIdx];
+            if (value === '' || value === null) {
+                stu.examScore = '';
+            } else {
+                let num = parseFloat(value);
+                if (isNaN(num)) num = 0;
+                if (num > 100) num = 100;
+                if (num < 0) num = 0;
+                stu.examScore = num;
+                if (stu.statuses && stu.statuses['examScore'] === 'missing') {
+                    delete stu.statuses['examScore'];
+                }
+            }
+            saveData();
+            const inputEl = document.querySelector(`input[data-row="${rowIdx}"][data-col="examScore"]`);
+            if (inputEl) applyInputScoreColor(inputEl);
+            refreshRowCalculations(rowIdx);
+        }
+
+        // 更新學生期末評語
+        function updateComment(rowIdx, value) {
+            const clsData = appData.classes[getCurrentClass()];
+            clsData.students[rowIdx].comment = value.trim();
+            saveData();
+            renderTableFoot();
+        }
+
+        // 即時重新計算該列小計、總分並刷新統計面板
+        function refreshRowCalculations(rowIdx) {
+            const clsData = appData.classes[getCurrentClass()];
+            const stu = clsData.students[rowIdx];
+            const res = calculateStudentGrades(stu, clsData.columns);
+            const isPE = appData.currentSubject === 'grade2_pe';
+
+            if (isPE) {
+                const rawEl = document.getElementById(`peraw-${rowIdx}`);
+                const bonusEl = document.getElementById(`pebonus-${rowIdx}`);
+                const regEl = document.getElementById(`regtot-${rowIdx}`);
+                if (rawEl) {
+                    rawEl.textContent = res.rawAvg;
+                    rawEl.className = `py-2 px-3 text-center border-r border-slate-300 ${getScoreColorClasses(res.rawAvg, true) || 'bg-amber-50/40 text-amber-900 font-medium'}`;
+                }
+                if (bonusEl) {
+                    bonusEl.textContent = res.peBonus > 0 ? `+${res.peBonus}` : '0';
+                    bonusEl.className = `inline-block min-w-[2.2rem] text-center font-bold text-xs ${res.peBonus > 0 ? 'text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded' : 'text-slate-400'}`;
+                }
+                if (regEl) {
+                    regEl.textContent = res.regularTotal;
+                    regEl.className = `py-2 px-3 text-center border-r border-slate-300 text-base ${getScoreColorClasses(res.regularTotal, true) || 'bg-orange-50/70 text-orange-700 font-bold'}`;
+                }
+            } else {
+                const qEl = document.getElementById(`qavg-${rowIdx}`);
+                const hEl = document.getElementById(`havg-${rowIdx}`);
+                const abEl = document.getElementById(`abavg-${rowIdx}`);
+                const regEl = document.getElementById(`regtot-${rowIdx}`);
+                const semEl = document.getElementById(`semtot-${rowIdx}`);
+
+                if (qEl) {
+                    qEl.textContent = res.quizAvg;
+                    qEl.className = `py-2 px-2 text-center border-r border-slate-300 ${getScoreColorClasses(res.quizAvg, true) || 'bg-blue-50/40 text-blue-900 font-medium'}`;
+                }
+                if (hEl) {
+                    hEl.textContent = res.hwAvg;
+                    hEl.className = `py-2 px-2 text-center border-r border-slate-300 ${getScoreColorClasses(res.hwAvg, true) || 'bg-amber-50/40 text-amber-900 font-medium'}`;
+                }
+                if (abEl) {
+                    abEl.textContent = res.abAvg;
+                    abEl.className = `py-2 px-2 text-center border-r border-slate-300 ${getScoreColorClasses(res.abAvg, true) || 'bg-purple-50/40 text-purple-900 font-medium'}`;
+                }
+                if (regEl) {
+                    regEl.textContent = res.regularTotal;
+                    regEl.className = `py-2 px-3 text-center border-r border-slate-300 text-base ${getScoreColorClasses(res.regularTotal, true) || 'bg-indigo-50/60 text-indigo-700 font-bold'}`;
+                }
+                if (semEl) {
+                    semEl.textContent = res.semesterTotal;
+                    semEl.className = `py-2 px-3 text-center border-r border-slate-300 text-base ${getScoreColorClasses(res.semesterTotal, true) || 'bg-slate-100/80 text-slate-900 font-bold'}`;
+                }
+            }
+
+            renderTableFoot();
+            renderMissingTracker();
+            renderDinoTracker();
+            renderStatsTable();
+        }
+
+        // 調整二年級體育「鼓勵加分」(+1 / -1)
+        function adjustPeBonus(rowIdx, delta) {
+            const clsData = appData.classes[getCurrentClass()];
+            const stu = clsData.students[rowIdx];
+            const current = parseInt(stu.peBonus) || 0;
+            const next = Math.max(0, current + delta);
+            stu.peBonus = next;
+            saveData();
+            refreshRowCalculations(rowIdx);
+            if (delta > 0) {
+                showToast(`🏅 ${stu.seat}號 ${stu.name} 鼓勵加分 +1（目前累計 +${next} 分）`);
+            }
+        }
+
+        // 更新二年級體育項目狀況／紀錄（例如：50下、44下），並若啟用給分尺規則自動算分
+        function handleRecordLiveInput(rowIdx, colId, value) {
+            const clsData = appData.classes[getCurrentClass()];
+            const col = clsData.columns.find(c => c.id === colId);
+            if (!col || !col.rubric || !col.rubric.enabled) return;
+
+            const autoScore = evaluateRubricScore(col.rubric, value);
+            if (autoScore !== null) {
+                const scoreInput = document.querySelector(`input[data-row="${rowIdx}"][data-col="${colId}"]`);
+                if (scoreInput) {
+                    scoreInput.value = autoScore;
+                    applyInputScoreColor(scoreInput);
+                }
+            }
+        }
+
+        function updateRecord(rowIdx, colId, value) {
+            const clsData = appData.classes[getCurrentClass()];
+            const stu = clsData.students[rowIdx];
+            const col = clsData.columns.find(c => c.id === colId);
+            if (!stu.records) stu.records = {};
+
+            const trimmed = value.trim();
+            if (trimmed === '') {
+                delete stu.records[colId];
+            } else {
+                stu.records[colId] = trimmed;
+            }
+
+            // 若有啟用給分標準且能匹配出分數，自動寫入分數並刷新平均
+            if (col && col.rubric && col.rubric.enabled) {
+                const autoScore = evaluateRubricScore(col.rubric, trimmed);
+                if (autoScore !== null) {
+                    stu.scores[colId] = autoScore;
+                    const scoreInput = document.querySelector(`input[data-row="${rowIdx}"][data-col="${colId}"]`);
+                    if (scoreInput) {
+                        scoreInput.value = autoScore;
+                        applyInputScoreColor(scoreInput);
+                    }
+                    saveData();
+                    refreshRowCalculations(rowIdx);
+                    return;
+                }
+            }
+
+            saveData();
+            renderTableFoot();
+        }
+
+        // 開啟二年級體育「自動給分標準（尺規）」設定視窗
+        function openRubricModal(colId) {
+            editingRubricColId = colId;
+            const clsData = appData.classes[getCurrentClass()];
+            const col = clsData.columns.find(c => c.id === colId);
+            if (!col) return;
+
+            document.getElementById('rubricModalTitle').textContent = `設定「${col.name}」自動給分標準`;
+            const rubric = col.rubric || {
+                enabled: true,
+                textRules: [{ label: '', score: 80 }],
+                rangeRules: [{ min: 1, max: 10, score: 90 }]
+            };
+
+            document.getElementById('rubricEnabledCheckbox').checked = !!rubric.enabled;
+            renderRubricEditorRows(rubric);
+            document.getElementById('rubricModal').classList.remove('hidden');
+        }
+
+        function renderRubricEditorRows(rubric) {
+            const textBox = document.getElementById('rubricTextRows');
+            textBox.innerHTML = '';
+            (rubric.textRules || []).forEach(r => addRubricTextRow(r.label, r.score));
+
+            const rangeBox = document.getElementById('rubricRangeRows');
+            rangeBox.innerHTML = '';
+            (rubric.rangeRules || []).forEach(r => addRubricRangeRow(r.min, r.max, r.score));
+        }
+
+        function addRubricTextRow(label = '', score = '') {
+            const box = document.getElementById('rubricTextRows');
+            const row = document.createElement('div');
+            row.className = 'flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200 rubric-text-row';
+            row.innerHTML = `
+                <span class="text-xs text-slate-500 shrink-0">狀況輸入：</span>
+                <input type="text" value="${label}" placeholder="例：不會扯、未通過" class="flex-1 text-xs py-1.5 px-2.5 rounded-lg border border-slate-300 bg-white outline-none focus:border-sky-500 r-label">
+                <span class="text-xs text-slate-500 shrink-0">➔ 自動給</span>
+                <input type="number" step="0.5" min="0" max="100" value="${score}" placeholder="分數" class="w-20 text-center text-xs font-bold py-1.5 px-2 rounded-lg border border-slate-300 bg-white outline-none focus:border-sky-500 r-score">
+                <span class="text-xs text-slate-500">分</span>
+                <button type="button" onclick="this.parentElement.remove()" class="text-slate-400 hover:text-rose-600 px-1.5"><i class="fa-solid fa-trash-can text-xs"></i></button>
+            `;
+            box.appendChild(row);
+        }
+
+        function addRubricRangeRow(min = '', max = '', score = '') {
+            const box = document.getElementById('rubricRangeRows');
+            const row = document.createElement('div');
+            row.className = 'flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200 rubric-range-row';
+            row.innerHTML = `
+                <span class="text-xs text-slate-500 shrink-0">次數介於</span>
+                <input type="number" step="1" min="0" value="${min}" placeholder="起" class="w-16 text-center text-xs py-1.5 px-1.5 rounded-lg border border-slate-300 bg-white outline-none focus:border-orange-500 r-min">
+                <span class="text-xs text-slate-500">～</span>
+                <input type="number" step="1" min="0" value="${max}" placeholder="迄" class="w-16 text-center text-xs py-1.5 px-1.5 rounded-lg border border-slate-300 bg-white outline-none focus:border-orange-500 r-max">
+                <span class="text-xs text-slate-500 shrink-0">下 ➔ 自動給</span>
+                <input type="number" step="0.5" min="0" max="100" value="${score}" placeholder="分數" class="w-20 text-center text-xs font-bold py-1.5 px-2 rounded-lg border border-slate-300 bg-white outline-none focus:border-orange-500 r-score">
+                <span class="text-xs text-slate-500">分</span>
+                <button type="button" onclick="this.parentElement.remove()" class="text-slate-400 hover:text-rose-600 px-1.5"><i class="fa-solid fa-trash-can text-xs"></i></button>
+            `;
+            box.appendChild(row);
+        }
+
+        function applyDiaboloPresetToModal() {
+            document.getElementById('rubricEnabledCheckbox').checked = true;
+            renderRubricEditorRows(getDefaultDiaboloRubric());
+            showToast('已載入「1分鐘扯鈴腳跨金龍」範例規則！');
+        }
+
+        function closeRubricModal() {
+            document.getElementById('rubricModal').classList.add('hidden');
+            editingRubricColId = null;
+        }
+
+        function saveRubricModal() {
+            if (!editingRubricColId) return;
+            const clsData = appData.classes[getCurrentClass()];
+            const col = clsData.columns.find(c => c.id === editingRubricColId);
+            if (!col) return;
+
+            const enabled = document.getElementById('rubricEnabledCheckbox').checked;
+            const textRules = [];
+            document.querySelectorAll('#rubricTextRows .rubric-text-row').forEach(row => {
+                const label = row.querySelector('.r-label').value.trim();
+                const score = row.querySelector('.r-score').value;
+                if (label !== '' && score !== '') {
+                    textRules.push({ label, score: parseFloat(score) });
+                }
+            });
+
+            const rangeRules = [];
+            document.querySelectorAll('#rubricRangeRows .rubric-range-row').forEach(row => {
+                const min = row.querySelector('.r-min').value;
+                const max = row.querySelector('.r-max').value;
+                const score = row.querySelector('.r-score').value;
+                if (min !== '' && max !== '' && score !== '') {
+                    rangeRules.push({ min: parseFloat(min), max: parseFloat(max), score: parseFloat(score) });
+                }
+            });
+
+            col.rubric = { enabled, textRules, rangeRules };
+
+            // 同步套用給分標準到二年級兩個班級（212 與 213 班）並即時重新換算分數
+            SUBJECT_CONFIG.grade2_pe.classes.forEach(cls => {
+                const cData = appData.classes[cls];
+                if (!cData) return;
+                const targetCol = cData.columns.find(c => c.name === col.name);
+                if (!targetCol) return;
+                targetCol.rubric = JSON.parse(JSON.stringify(col.rubric));
+
+                if (enabled) {
+                    cData.students.forEach(stu => {
+                        const rec = stu.records && stu.records[targetCol.id];
+                        if (rec) {
+                            const s = evaluateRubricScore(targetCol.rubric, rec);
+                            if (s !== null) stu.scores[targetCol.id] = s;
+                        }
+                    });
+                }
+            });
+
+            saveData();
+            closeRubricModal();
+            renderAll();
+            showToast(`已儲存並同步套用 212、213 班「${col.name}」的自動給分標準！`);
+        }
+
+        // 二年級體育「項目狀況」點擊時，在輸入框下方彈出直覺快捷選項按鈕浮動選單
+        function openPeQuickPicker(inputEl, rowIdx, colId) {
+            closePeQuickPicker();
+            const clsData = appData.classes[getCurrentClass()];
+            const col = clsData.columns.find(c => c.id === colId);
+            if (!col) return;
+
+            const hasRubric = col.rubric && col.rubric.enabled;
+            const chips = [];
+
+            if (hasRubric) {
+                (col.rubric.textRules || []).forEach(r => {
+                    if (r.label) {
+                        chips.push({ text: r.label, badge: `${r.score}分`, style: 'bg-sky-50 hover:bg-sky-100 text-sky-900 border-sky-300' });
+                    }
+                });
+                (col.rubric.rangeRules || []).forEach(r => {
+                    const label = r.max >= 900 ? `${r.min}下以上` : `${r.min}~${r.max}下`;
+                    const fillVal = r.max >= 900 ? `${r.min}下` : `${r.min}~${r.max}下`;
+                    chips.push({ text: label, value: fillVal, badge: `${r.score}分`, style: 'bg-orange-50 hover:bg-orange-100 text-orange-900 border-orange-300' });
+                });
+            } else {
+                // 未啟用尺規時也提供常用快捷狀態按鈕，點一下即可填入
+                ['優秀通過', '表現良好', '待加強', '請假補測'].forEach(t => {
+                    chips.push({ text: t, value: t, badge: '', style: 'bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-300' });
+                });
+            }
+
+            if (chips.length === 0) return;
+
+            const rect = inputEl.getBoundingClientRect();
+            const picker = document.createElement('div');
+            picker.id = 'peQuickPickerPopover';
+            picker.style.position = 'fixed';
+            picker.style.left = `${Math.min(window.innerWidth - 310, Math.max(12, rect.left - 40))}px`;
+            picker.style.top = `${Math.min(window.innerHeight - 180, rect.bottom + 6)}px`;
+            picker.className = 'z-50 bg-white rounded-xl shadow-xl border border-orange-200 p-2.5 w-[295px] space-y-2';
+
+            const chipsHtml = chips.map(ch => {
+                const v = (ch.value || ch.text).replace(/'/g, "\\'");
+                return `<button type="button" onmousedown="selectPeQuickChip(event, ${rowIdx}, '${colId}', '${v}')"
+                    class="px-2 py-1 rounded-lg border text-xs font-bold transition flex items-center gap-1 ${ch.style}">
+                    <span>${ch.text}</span>
+                    ${ch.badge ? `<span class="text-[10px] opacity-80">(${ch.badge})</span>` : ''}
+                </button>`;
+            }).join('');
+
+            picker.innerHTML = `
+                <div class="flex items-center justify-between text-[11px] font-bold text-slate-500 border-b border-slate-100 pb-1">
+                    <span>⚡ 點選快速填入「${col.name}」狀況：</span>
+                    <button type="button" onmousedown="closePeQuickPicker()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="flex flex-wrap gap-1.5 max-h-[140px] overflow-y-auto">${chipsHtml}</div>
+                <div class="text-[10px] text-slate-400">也可直接在格子輸入確切數字（如 <code class="bg-slate-100 px-1 rounded">15</code>）自動換算</div>
+            `;
+
+            document.body.appendChild(picker);
+            setTimeout(() => {
+                document.addEventListener('mousedown', handleOutsideQuickPicker);
+            }, 10);
+        }
+
+        function handleOutsideQuickPicker(e) {
+            const picker = document.getElementById('peQuickPickerPopover');
+            if (picker && !picker.contains(e.target) && (!e.target.dataset || !String(e.target.dataset.col || '').startsWith('rec_'))) {
+                closePeQuickPicker();
+            }
+        }
+
+        function closePeQuickPicker() {
+            const picker = document.getElementById('peQuickPickerPopover');
+            if (picker) picker.remove();
+            document.removeEventListener('mousedown', handleOutsideQuickPicker);
+        }
+
+        function selectPeQuickChip(e, rowIdx, colId, val) {
+            e.preventDefault();
+            const inputEl = document.querySelector(`input[data-row="${rowIdx}"][data-col="rec_${colId}"]`);
+            if (inputEl) {
+                inputEl.value = val;
+            }
+            updateRecord(rowIdx, colId, val);
+            closePeQuickPicker();
+        }
+
+        // 開啟自然科 / 體育科評語推薦庫彈窗
+        function openCommentModal(rowIdx) {
+            editingCommentRowIdx = rowIdx;
+            const cls = getCurrentClass();
+            const stu = appData.classes[cls].students[rowIdx];
+            const isPE = appData.currentSubject === 'grade2_pe';
+            const bank = isPE ? PE_COMMENT_BANK : SCIENCE_COMMENT_BANK;
+            
+            document.getElementById('commentModalTitle').textContent = `${isPE ? '二年級體育科' : '五年級自然科'}期末評語推薦庫 — ${cls}班 ${stu.seat}號 ${stu.name}`;
+            document.getElementById('modalCommentInput').value = stu.comment || '';
+
+            const listContainer = document.getElementById('commentBankList');
+            listContainer.innerHTML = '';
+
+            bank.forEach(group => {
+                const section = document.createElement('div');
+                section.className = 'space-y-1.5';
+                section.innerHTML = `<div class="text-xs font-bold text-slate-600">${group.category}</div>`;
+                
+                const btnGrid = document.createElement('div');
+                btnGrid.className = 'grid grid-cols-1 gap-1.5';
+
+                group.items.forEach(sentence => {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = `text-left text-xs p-2.5 rounded-xl border ${group.color} hover:brightness-95 transition flex items-center justify-between gap-2`;
+                    btn.innerHTML = `<span>${sentence}</span><span class="shrink-0 text-[11px] font-bold opacity-75">+ 選用</span>`;
+                    btn.onclick = () => applyBankSentence(sentence);
+                    btnGrid.appendChild(btn);
+                });
+
+                section.appendChild(btnGrid);
+                listContainer.appendChild(section);
+            });
+
+            document.getElementById('commentModal').classList.remove('hidden');
+        }
+
+        // 點選評語庫句子套用至編輯框
+        function applyBankSentence(sentence) {
+            const input = document.getElementById('modalCommentInput');
+            const mode = document.querySelector('input[name="commentMode"]:checked').value;
+            if (mode === 'append' && input.value.trim() !== '') {
+                const current = input.value.trim();
+                const sep = (current.endsWith('。') || current.endsWith('！')) ? '' : '，';
+                input.value = current + sep + sentence;
+            } else {
+                input.value = sentence;
+            }
+        }
+
+        function closeCommentModal() {
+            document.getElementById('commentModal').classList.add('hidden');
+            editingCommentRowIdx = null;
+        }
+
+        // 確認儲存彈窗中的評語
+        function saveStudentCommentFromModal() {
+            if (editingCommentRowIdx === null) return;
+            const newComment = document.getElementById('modalCommentInput').value.trim();
+            const clsData = appData.classes[getCurrentClass()];
+            clsData.students[editingCommentRowIdx].comment = newComment;
+            saveData();
+
+            const rowInput = document.getElementById(`comment-input-${editingCommentRowIdx}`);
+            if (rowInput) rowInput.value = newComment;
+            renderTableFoot();
+            closeCommentModal();
+            showToast('已套用期末評語！');
+        }
+
+        // 鍵盤方向鍵 / Enter 垂直跳格
+        function handleKeyNav(e, rowIdx, colId) {
+            if (e.key === 'Enter' || e.key === 'ArrowDown') {
+                e.preventDefault();
+                const nextInput = document.querySelector(`input[data-row="${rowIdx + 1}"][data-col="${colId}"]`);
+                if (nextInput) {
+                    nextInput.focus();
+                    nextInput.select();
+                }
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                const prevInput = document.querySelector(`input[data-row="${rowIdx - 1}"][data-col="${colId}"]`);
+                if (prevInput) {
+                    prevInput.focus();
+                    prevInput.select();
+                }
+            }
+        }
+
+        // 開啟名單編輯視窗
+        function openRosterModal() {
+            const cls = getCurrentClass();
+            const clsData = appData.classes[cls];
+            document.getElementById('modalClassTitle').textContent = `編輯 ${cls} 班學生名單`;
+            
+            const lines = clsData.students.map(s => `${s.seat}\t${s.name}`);
+            document.getElementById('rosterTextarea').value = lines.join('\n');
+            document.getElementById('rosterModal').classList.remove('hidden');
+        }
+
+        function closeRosterModal() {
+            document.getElementById('rosterModal').classList.add('hidden');
+        }
+
+        // 儲存批次編輯的名單
+        function saveRoster() {
+            const text = document.getElementById('rosterTextarea').value.trim();
+            const cls = getCurrentClass();
+            const clsData = appData.classes[cls];
+            const oldStudentsMap = {};
+            clsData.students.forEach(s => { oldStudentsMap[s.seat] = s; });
+
+            const newStudents = [];
+            const lines = text.split('\n');
+            
+            lines.forEach((line, idx) => {
+                const trimmed = line.trim();
+                if (!trimmed) return;
+                const parts = trimmed.split(/[\t,\s]+/);
+                let seat = parseInt(parts[0]);
+                let name = parts.slice(1).join(' ');
+
+                if (isNaN(seat)) {
+                    seat = idx + 1;
+                    name = trimmed;
+                }
+                if (!name) name = `${seat}號學生`;
+
+                const existing = oldStudentsMap[seat];
+                newStudents.push({
+                    id: existing ? existing.id : 'stu_' + Date.now() + '_' + seat,
+                    seat: seat,
+                    name: name,
+                    scores: existing ? existing.scores : {},
+                    examScore: existing ? existing.examScore : '',
+                    comment: existing ? (existing.comment || '') : ''
+                });
+            });
+
+            if (newStudents.length === 0) {
+                showToast('名單不能為空！', true);
+                return;
+            }
+
+            clsData.students = newStudents;
+            saveData();
+            closeRosterModal();
+            renderAll();
+            showToast(`已更新 ${cls} 班名單（共 ${newStudents.length} 人）`);
+        }
+
+        // 通用剪貼簿複製函式
+        function copyTextHelper(textToCopy, successMessage) {
+            const textArea = document.createElement('textarea');
+            textArea.value = textToCopy;
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                showToast(successMessage);
+            } catch (err) {
+                showToast('複製失敗，請手動選取複製', true);
+            }
+            document.body.removeChild(textArea);
+        }
+
+        // 一鍵複製整排成績或評語到剪貼簿
+        function copyColumnToClipboard(type) {
+            const cls = getCurrentClass();
+            const clsData = appData.classes[cls];
+            const values = clsData.students.map(stu => {
+                if (type === 'regularTotal') {
+                    const res = calculateStudentGrades(stu, clsData.columns);
+                    return res.regularTotal === '-' ? '' : res.regularTotal;
+                } else if (type === 'examScore') {
+                    return stu.examScore === undefined ? '' : stu.examScore;
+                } else if (type === 'comment') {
+                    return stu.comment || '';
+                }
+                return '';
+            });
+
+            const labels = {
+                regularTotal: '平時總分',
+                examScore: '段考成績',
+                comment: '期末評語'
+            };
+            copyTextHelper(values.join('\n'), `已複製 ${cls} 班「${labels[type]}」，請至學務系統第一格按 Ctrl+V 貼上！`);
+        }
+
+        // 匯出本班 CSV (可用 Excel 開啟)
+        function exportCSV() {
+            const cls = getCurrentClass();
+            const clsData = appData.classes[cls];
+            const isPE = appData.currentSubject === 'grade2_pe';
+
+            if (isPE) {
+                let headers = ['座號', '姓名'];
+                clsData.columns.forEach(c => {
+                    headers.push(`${c.name}(分數)`);
+                    headers.push(`${c.name}(項目狀況)`);
+                });
+                headers.push('加權均分', '鼓勵加分', '體育平時總分(含加分)', '期末評語');
+
+                let csvRows = [headers.join(',')];
+                clsData.students.forEach(stu => {
+                    const res = calculateStudentGrades(stu, clsData.columns);
+                    let row = [stu.seat, `"${stu.name}"`];
+                    clsData.columns.forEach(c => {
+                        row.push(stu.scores[c.id] ?? '');
+                        row.push(`"${((stu.records && stu.records[c.id]) || '').replace(/"/g, '""')}"`);
+                    });
+                    row.push(res.rawAvg, res.peBonus, res.regularTotal, `"${(stu.comment || '').replace(/"/g, '""')}"`);
+                    csvRows.push(row.join(','));
+                });
+
+                const csvContent = '\uFEFF' + csvRows.join('\n');
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `二年${cls}班_體育成績與評語總表.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+                showToast(`已下載「二年${cls}班_體育成績與評語總表.csv」`);
+                return;
+            }
+
+            const quizCols = clsData.columns.filter(c => c.category === 'quiz');
+            const hwCols = clsData.columns.filter(c => c.category === 'homework');
+            const abCols = clsData.columns.filter(c => c.category === 'abtest');
+
+            let headers = ['座號', '姓名'];
+            quizCols.forEach(c => headers.push(`[考卷25%]${c.name}`));
+            headers.push('考卷平均');
+            
+            hwCols.forEach(c => headers.push(c.checkOnly ? `[只檢查]${c.name}` : `[作業50%]${c.name}`));
+            headers.push('作業表現平均');
+            abCols.forEach(c => headers.push(`[AB卷25%]${c.name}`));
+            headers.push('AB卷平均', '平時總分(四捨五入)', '段考成績', '學期總成績', '期末評語');
+
+            let csvRows = [headers.join(',')];
+
+            clsData.students.forEach(stu => {
+                const res = calculateStudentGrades(stu, clsData.columns);
+                let row = [stu.seat, `"${stu.name}"`];
+                
+                quizCols.forEach(c => row.push(stu.scores[c.id] ?? ''));
+                row.push(res.quizAvg);
+                
+                hwCols.forEach(c => {
+                    if (c.checkOnly) {
+                        const st = (stu.statuses && stu.statuses[c.id]) || '';
+                        row.push(st === 'done' ? '已交' : (st === 'correction' ? '未訂正' : '未交'));
+                    } else {
+                        row.push(stu.scores[c.id] ?? '');
+                    }
+                });
+                row.push(res.hwAvg);
+                
+                abCols.forEach(c => row.push(stu.scores[c.id] ?? ''));
+                row.push(res.abAvg, res.regularTotal, stu.examScore ?? '', res.semesterTotal, `"${(stu.comment || '').replace(/"/g, '""')}"`);
+
+                csvRows.push(row.join(','));
+            });
+
+            const csvContent = '\uFEFF' + csvRows.join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `五年${cls}班_自然科成績與評語總表.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast(`已下載「五年${cls}班_自然科成績與評語總表.csv」`);
+        }
+
+        // 備份全學年 JSON 檔案
+        function exportJSON() {
+            const dataStr = JSON.stringify(appData, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const dateStr = new Date().toISOString().slice(0, 10);
+            a.href = url;
+            a.download = `國小科任成績備份(自然與體育)_${dateStr}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('全學年成績備份檔已下載！');
+        }
+
+        // 還原 JSON 檔案
+        function importJSON(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    if (imported && imported.classes) {
+                        appData = { ...appData, ...imported };
+                        saveData();
+                        renderAll();
+                        showToast('成績資料還原成功！');
+                    } else {
+                        showToast('備份檔案格式不正確', true);
+                    }
+                } catch (err) {
+                    showToast('讀取檔案失敗', true);
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = '';
+        }
+
+        // 整體畫面重新渲染
+        function renderAll() {
+            document.getElementById('regularWeightInput').value = appData.regularWeight;
+            document.getElementById('examWeightDisplay').textContent = 100 - appData.regularWeight;
+            renderSubjectUI();
+            renderClassTabs();
+            renderCategoryTags();
+            renderTableHead();
+            renderTableBody();
+        }
+
+        // 啟動應用程式
+        window.onload = function() {
+            loadData();
+            renderAll();
+        };
+    </script>
+</body>
+</html>
